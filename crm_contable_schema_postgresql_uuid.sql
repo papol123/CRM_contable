@@ -301,7 +301,60 @@ CREATE TABLE gastos (
 );
 
 -- =====================================================================
--- ÍNDICES SOBRE LLAVES FORÁNEAS MÁS CONSULTADAS
+-- MÓDULO 4: AUTENTICACIÓN, ROLES Y CONTROL DE ACCESO (RBAC)
+-- =====================================================================
+
+CREATE TABLE roles (
+    id_rol          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    codigo          VARCHAR(50) UNIQUE NOT NULL,
+    nombre          VARCHAR(100) NOT NULL,
+    descripcion     TEXT,
+    activo          BOOLEAN NOT NULL DEFAULT TRUE,
+    creado_en       TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE permisos (
+    id_permiso      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    modulo          VARCHAR(50) NOT NULL,
+    codigo          VARCHAR(100) UNIQUE NOT NULL,
+    nombre          VARCHAR(100) NOT NULL,
+    descripcion     TEXT
+);
+
+CREATE TABLE roles_permisos (
+    id_rol          UUID NOT NULL REFERENCES roles(id_rol) ON DELETE CASCADE,
+    id_permiso      UUID NOT NULL REFERENCES permisos(id_permiso) ON DELETE CASCADE,
+    PRIMARY KEY (id_rol, id_permiso)
+);
+
+CREATE TABLE usuarios (
+    id_usuario      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id_tercero      UUID REFERENCES terceros(id_tercero) ON DELETE SET NULL,
+    id_rol          UUID NOT NULL REFERENCES roles(id_rol),
+    email           VARCHAR(150) UNIQUE NOT NULL,
+    password_hash   VARCHAR(255) NOT NULL,
+    nombres         VARCHAR(100) NOT NULL,
+    apellidos       VARCHAR(100) NOT NULL,
+    telefono        VARCHAR(30),
+    activo          BOOLEAN NOT NULL DEFAULT TRUE,
+    ultimo_login    TIMESTAMPTZ,
+    creado_en       TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    actualizado_en  TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE refresh_tokens (
+    id_refresh_token UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id_usuario       UUID NOT NULL REFERENCES usuarios(id_usuario) ON DELETE CASCADE,
+    token_hash       VARCHAR(255) NOT NULL,
+    revocado         BOOLEAN NOT NULL DEFAULT FALSE,
+    expira_en        TIMESTAMPTZ NOT NULL,
+    ip_address       VARCHAR(45),
+    user_agent       TEXT,
+    creado_en        TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- =====================================================================
+-- ÍNDICES SOBRE LLAVES FORÁNEAS MÁS CONSULTADAS Y SEGURIDAD
 -- =====================================================================
 
 CREATE INDEX idx_terceros_ciudad ON terceros(id_ciudad);
@@ -313,4 +366,70 @@ CREATE INDEX idx_pagos_tercero ON pagos(id_tercero);
 CREATE INDEX idx_facturas_venta_cliente ON facturas_venta(id_cliente);
 CREATE INDEX idx_facturas_compra_proveedor ON facturas_compra(id_proveedor);
 
+-- Índices de seguridad
+CREATE INDEX idx_usuarios_email ON usuarios(email);
+CREATE INDEX idx_usuarios_rol ON usuarios(id_rol);
+CREATE INDEX idx_refresh_tokens_usuario ON refresh_tokens(id_usuario);
+CREATE INDEX idx_roles_permisos_rol ON roles_permisos(id_rol);
+
+-- =====================================================================
+-- DATOS SEMILLA (SEEDS) DE SEGURIDAD Y ROLES
+-- =====================================================================
+
+-- 1. Roles iniciales
+INSERT INTO roles (codigo, nombre, descripcion) VALUES
+('ADMIN', 'Administrador', 'Acceso total al sistema, configuración, auditoría y cierres contables'),
+('USUARIO', 'Usuario Operativo', 'Acceso operativo para facturación, inventario y consultas sin permisos de anulación ni configuración');
+
+-- 2. Catálogo de Permisos según Especificación
+INSERT INTO permisos (modulo, codigo, nombre, descripcion) VALUES
+('ventas', 'ventas.consultar', 'Consultar ventas', 'Ver facturas y cotizaciones'),
+('ventas', 'ventas.crear', 'Crear ventas', 'Registrar ventas y cotizaciones'),
+('ventas', 'ventas.anular', 'Anular ventas', 'Anular facturas de venta generadas'),
+('compras', 'compras.consultar', 'Consultar compras', 'Ver órdenes y facturas de compra'),
+('compras', 'compras.crear', 'Crear compras', 'Registrar compras a proveedores'),
+('compras', 'compras.anular', 'Anular compras', 'Anular compras registradas'),
+('inventario', 'inventario.consultar', 'Consultar inventario', 'Ver existencias y catálogo'),
+('inventario', 'inventario.ajustar', 'Ajustar inventario', 'Realizar ajustes manuales o conteos'),
+('inventario', 'inventario.costos', 'Ver costos', 'Visualizar costos de adquisición y márgenes'),
+('cartera', 'cartera.consultar', 'Consultar cartera', 'Ver saldos y estados de cuenta'),
+('pagos', 'pagos.registrar', 'Registrar pagos', 'Recibir y registrar pagos de clientes/proveedores'),
+('pagos', 'pagos.anular', 'Anular pagos', 'Reversar pagos aplicados'),
+('terceros', 'terceros.consultar', 'Consultar terceros', 'Ver clientes y proveedores'),
+('terceros', 'terceros.crear', 'Crear terceros', 'Crear nuevos clientes y proveedores'),
+('terceros', 'terceros.editar', 'Editar terceros', 'Actualizar información de terceros'),
+('usuarios', 'usuarios.gestionar', 'Gestionar usuarios', 'Crear, editar y dar de baja usuarios del sistema'),
+('roles', 'roles.gestionar', 'Gestionar roles', 'Modificar permisos asignados a roles'),
+('auditoria', 'auditoria.consultar', 'Consultar auditoría', 'Revisar logs y trazabilidad de operaciones'),
+('configuracion', 'configuracion.gestionar', 'Configuración general', 'Consecutivos, resoluciones DIAN y parámetros'),
+('cierres', 'cierres.ejecutar', 'Ejecutar cierres contables', 'Ejecución de cierres periódicos contables');
+
+-- 3. Asignación de permisos al Administrador (Todos los permisos)
+INSERT INTO roles_permisos (id_rol, id_permiso)
+SELECT r.id_rol, p.id_permiso
+FROM roles r, permisos p
+WHERE r.codigo = 'ADMIN';
+
+-- 4. Asignación de permisos al Usuario Operativo
+INSERT INTO roles_permisos (id_rol, id_permiso)
+SELECT r.id_rol, p.id_permiso
+FROM roles r
+JOIN permisos p ON p.codigo IN (
+    'ventas.consultar', 'ventas.crear',
+    'compras.consultar', 'compras.crear',
+    'inventario.consultar',
+    'cartera.consultar',
+    'pagos.registrar',
+    'terceros.consultar', 'terceros.crear', 'terceros.editar'
+)
+WHERE r.codigo = 'USUARIO';
+
+-- 5. Usuario Inicial Administrador de prueba
+-- Contraseña temporal: "Admin123*" (Hash generado con bcrypt genérico costo 10)
+INSERT INTO usuarios (id_rol, email, password_hash, nombres, apellidos)
+SELECT r.id_rol, 'admin@crmcontable.com', '$2a$10$wN9Q7iF6Vv4qJgL0lZ4mreM6zC6uGvR8QWq9Yg9tX8uBv2vKj8jC6', 'Administrador', 'Principal'
+FROM roles r
+WHERE r.codigo = 'ADMIN';
+
 COMMIT;
+
