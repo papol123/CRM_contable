@@ -450,20 +450,19 @@ async function runSeed() {
     const rolAdmin = resRoles.rows.find(r => r.codigo === 'ADMIN').id_rol;
     const rolUsuario = resRoles.rows.find(r => r.codigo === 'USUARIO').id_rol;
 
-    const adminPasswordHash = bcrypt.hashSync('Admin123*', 10);
-    const userPasswordHash = bcrypt.hashSync('User123*', 10);
+    const defaultPasswordHash = bcrypt.hashSync('Admin123*', 10);
 
     // Actualizar usuario admin existente
     await client.query(`
       UPDATE usuarios 
       SET password_hash = $1, id_tercero = $2, nombres = 'Carlos Andrés', apellidos = 'Pérez Gómez', telefono = '3001234567', activo = true
       WHERE email = 'admin@crmcontable.com';
-    `, [adminPasswordHash, empleadoAdmin]);
+    `, [defaultPasswordHash, empleadoAdmin]);
 
     const usuariosNuevos = [
       {
         email: 'gerencia@crmcontable.com',
-        password_hash: adminPasswordHash,
+        password_hash: defaultPasswordHash,
         nombres: 'María Fernanda',
         apellidos: 'Morales Castro',
         telefono: '3109876543',
@@ -472,7 +471,7 @@ async function runSeed() {
       },
       {
         email: 'usuario@crmcontable.com',
-        password_hash: userPasswordHash,
+        password_hash: defaultPasswordHash,
         nombres: 'Juan Camilo',
         apellidos: 'Gómez Restrepo',
         telefono: '3156789012',
@@ -481,7 +480,7 @@ async function runSeed() {
       },
       {
         email: 'vendedor@crmcontable.com',
-        password_hash: userPasswordHash,
+        password_hash: defaultPasswordHash,
         nombres: 'Laura Daniela',
         apellidos: 'Ortiz Prada',
         telefono: '3203456789',
@@ -490,7 +489,7 @@ async function runSeed() {
       },
       {
         email: 'operador@crmcontable.com',
-        password_hash: userPasswordHash,
+        password_hash: defaultPasswordHash,
         nombres: 'Andrés Felipe',
         apellidos: 'Rojas Medina',
         telefono: '3187654321',
@@ -499,7 +498,7 @@ async function runSeed() {
       },
       {
         email: 'caja@crmcontable.com',
-        password_hash: userPasswordHash,
+        password_hash: defaultPasswordHash,
         nombres: 'Sandra Milena',
         apellidos: 'Vargas Cárdenas',
         telefono: '3112345678',

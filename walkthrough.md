@@ -90,10 +90,10 @@ Se poblaron todas las **39 tablas** del modelo de base de datos con datos cohere
 | :--- | :--- | :--- | :--- | :--- |
 | **ADMIN** | `admin@crmcontable.com` | `Admin123*` | Carlos Andrés Pérez Gómez | Administrador del Sistema |
 | **ADMIN** | `gerencia@crmcontable.com` | `Admin123*` | María Fernanda Morales Castro | Gerente General |
-| **USUARIO** | `usuario@crmcontable.com` | `User123*` | Juan Camilo Gómez Restrepo | Asesor de Mostrador |
-| **USUARIO** | `vendedor@crmcontable.com` | `User123*` | Laura Daniela Ortiz Prada | Asesora Comercial Repuestos |
-| **USUARIO** | `operador@crmcontable.com` | `User123*` | Andrés Felipe Rojas Medina | Encargado de Bodega |
-| **USUARIO** | `caja@crmcontable.com` | `User123*` | Sandra Milena Vargas Cárdenas | Cajera Facturadora |
+| **USUARIO** | `usuario@crmcontable.com` | `Admin123*` | Juan Camilo Gómez Restrepo | Asesor de Mostrador |
+| **USUARIO** | `vendedor@crmcontable.com` | `Admin123*` | Laura Daniela Ortiz Prada | Asesora Comercial Repuestos |
+| **USUARIO** | `operador@crmcontable.com` | `Admin123*` | Andrés Felipe Rojas Medina | Encargado de Bodega |
+| **USUARIO** | `caja@crmcontable.com` | `Admin123*` | Sandra Milena Vargas Cárdenas | Cajera Facturadora |
 
 ### Script de Semillas (Seed)
 Para volver a ejecutar o repoblar las tablas en cualquier momento:

@@ -11,10 +11,11 @@ export interface AuthUser {
   email: string;
   nombres: string;
   apellidos: string;
-  rol: {
+  rol: string | {
     nombre: string;
-    permisos: string[];
+    permisos?: string[];
   };
+  permisos?: string[];
 }
 
 export interface AuthResponse {

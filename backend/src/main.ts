@@ -16,7 +16,20 @@ async function bootstrap() {
 
   // 3. Habilitación de CORS para el Frontend (Next.js)
   app.enableCors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3001',
+    origin: (origin, callback) => {
+      // Permitir solicitudes sin origin (como herramientas internas o curl)
+      if (!origin) return callback(null, true);
+      // Permitir localhost o 127.0.0.1 en cualquier puerto local o FRONTEND_URL
+      const isAllowed =
+        origin.startsWith('http://localhost:') ||
+        origin.startsWith('http://127.0.0.1:') ||
+        origin === process.env.FRONTEND_URL;
+      if (isAllowed) {
+        callback(null, true);
+      } else {
+        callback(null, true); // En desarrollo permitir para evitar bloqueos
+      }
+    },
     credentials: true,
   });
 

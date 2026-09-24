@@ -97,7 +97,13 @@ export default function DashboardPage() {
           textAlign: 'left',
         }}>
           <InfoRow label="Correo" value={user.email} />
-          <InfoRow label="Rol" value={user.rol?.nombre ?? '—'} />
+          <InfoRow 
+            label="Rol" 
+            value={typeof user.rol === 'string' ? user.rol : (user.rol?.nombre ?? '—')} 
+          />
+          {user.permisos && user.permisos.length > 0 && (
+            <InfoRow label="Permisos Activos" value={`${user.permisos.length} permisos`} />
+          )}
         </div>
 
         {/* Logout */}

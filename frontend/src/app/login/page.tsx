@@ -211,6 +211,72 @@ export default function LoginPage() {
           </button>
         </form>
 
+        {/* Acceso Rápido con Usuarios de Prueba */}
+        <section className={styles.testAccountsWrapper}>
+          <div className={styles.testAccountsTitle}>⚡ Cuentas de Prueba Disponibles</div>
+          <div className={styles.testAccountsGrid}>
+            <button
+              type="button"
+              className={styles.testAccountButton}
+              onClick={() => {
+                setEmail('admin@crmcontable.com');
+                setPassword('Admin123*');
+                setErrors({ email: '', password: '' });
+                setApiError('');
+              }}
+            >
+              <span className={`${styles.testAccountRole} ${styles.roleBadgeAdmin}`}>ADMIN</span>
+              <span className={styles.testAccountEmail}>admin@crmcontable.com</span>
+              <span className={styles.testAccountName}>Carlos Pérez (Admin)</span>
+            </button>
+
+            <button
+              type="button"
+              className={styles.testAccountButton}
+              onClick={() => {
+                setEmail('gerencia@crmcontable.com');
+                setPassword('Admin123*');
+                setErrors({ email: '', password: '' });
+                setApiError('');
+              }}
+            >
+              <span className={`${styles.testAccountRole} ${styles.roleBadgeAdmin}`}>ADMIN</span>
+              <span className={styles.testAccountEmail}>gerencia@crmcontable.com</span>
+              <span className={styles.testAccountName}>María Morales (Gerencia)</span>
+            </button>
+
+            <button
+              type="button"
+              className={styles.testAccountButton}
+              onClick={() => {
+                setEmail('usuario@crmcontable.com');
+                setPassword('Admin123*');
+                setErrors({ email: '', password: '' });
+                setApiError('');
+              }}
+            >
+              <span className={`${styles.testAccountRole} ${styles.roleBadgeUser}`}>USUARIO</span>
+              <span className={styles.testAccountEmail}>usuario@crmcontable.com</span>
+              <span className={styles.testAccountName}>Juan Gómez (Mostrador)</span>
+            </button>
+
+            <button
+              type="button"
+              className={styles.testAccountButton}
+              onClick={() => {
+                setEmail('vendedor@crmcontable.com');
+                setPassword('Admin123*');
+                setErrors({ email: '', password: '' });
+                setApiError('');
+              }}
+            >
+              <span className={`${styles.testAccountRole} ${styles.roleBadgeUser}`}>USUARIO</span>
+              <span className={styles.testAccountEmail}>vendedor@crmcontable.com</span>
+              <span className={styles.testAccountName}>Laura Ortiz (Ventas)</span>
+            </button>
+          </div>
+        </section>
+
         <footer className={styles.footer}>
           © {new Date().getFullYear()} CRM Contable — Todos los derechos reservados
         </footer>
