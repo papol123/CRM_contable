@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-
-// ─── Minimal dashboard placeholder ───────────────────────────────────────────
+import styles from './dashboard.module.css';
+import AdminDashboard from './components/AdminDashboard';
+import UserDashboard from './components/UserDashboard';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -22,120 +23,124 @@ export default function DashboardPage() {
     router.replace('/login');
   }
 
+  // Determine if the current user has the Administrator role or permission
+  const { isAdmin, roleCode, roleName } = useMemo(() => {
+    if (!user) return { isAdmin: false, roleCode: '', roleName: '' };
+
+    const code =
+      typeof user.rol === 'string'
+        ? user.rol.toUpperCase()
+        : (user.rol?.nombre || '').toUpperCase();
+
+    const hasGestionarUsers = user.permisos?.includes('usuarios.gestionar') ?? false;
+    const admin = code === 'ADMIN' || hasGestionarUsers;
+
+    const displayRole = admin ? 'ADMIN' : 'USUARIO';
+    const displayName = admin ? 'Administrador' : 'Usuario Operativo';
+
+    return { isAdmin: admin, roleCode: displayRole, roleName: displayName };
+  }, [user]);
+
+  // Loading state
   if (isLoading || !user) {
     return (
       <div style={{
         minHeight: '100vh',
         display: 'flex',
+        flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
         background: 'var(--color-bg)',
+        gap: '1rem',
       }}>
         <div style={{
-          width: '36px', height: '36px',
+          width: '40px',
+          height: '40px',
           border: '3px solid rgba(99,102,241,0.2)',
           borderTop: '3px solid #6366f1',
           borderRadius: '50%',
           animation: 'spin 0.8s linear infinite',
         }} />
+        <span style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
+          Verificando sesión en el CRM Contable...
+        </span>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }
 
+  const userInitial = user.nombres?.[0]?.toUpperCase() || 'U';
+
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: 'var(--color-bg)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: '2rem',
-    }}>
-      <div style={{
-        background: 'rgba(19,21,42,0.85)',
-        border: '1px solid rgba(99,102,241,0.2)',
-        borderRadius: '20px',
-        padding: '2.5rem 3rem',
-        maxWidth: '480px',
-        width: '100%',
-        textAlign: 'center',
-        backdropFilter: 'blur(20px)',
-        boxShadow: '0 24px 64px rgba(0,0,0,0.45)',
-      }}>
-        {/* Welcome badge */}
-        <div style={{
-          display: 'inline-block',
-          background: 'rgba(99,102,241,0.15)',
-          border: '1px solid rgba(99,102,241,0.3)',
-          borderRadius: '999px',
-          padding: '0.35rem 1rem',
-          fontSize: '0.8rem',
-          color: '#818cf8',
-          fontWeight: 600,
-          letterSpacing: '0.05em',
-          textTransform: 'uppercase',
-          marginBottom: '1.25rem',
-        }}>
-          ✓ Sesión activa
+    <div className={styles.container}>
+      {/* Top Navbar */}
+      <header className={styles.navbar}>
+        <div className={styles.brand}>
+          <div className={styles.brandIcon}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z" />
+              <path d="M6.5 6.5h.01M17.5 6.5h.01M17.5 17.5h.01M6.5 17.5h.01" strokeWidth="3" />
+            </svg>
+          </div>
+          <div>
+            <div className={styles.brandTitle}>CRM Contable</div>
+            <div className={styles.brandSubtitle}>Repuestos Automotrices</div>
+          </div>
         </div>
 
-        <h1 style={{ fontSize: '1.8rem', fontWeight: 700, marginBottom: '0.5rem', color: '#f1f5f9' }}>
-          ¡Bienvenido de nuevo!
-        </h1>
-        <p style={{ color: '#94a3b8', marginBottom: '1.75rem', fontSize: '0.95rem' }}>
-          {user.nombres} {user.apellidos}
-        </p>
+        <div className={styles.navActions}>
+          {/* User info badge */}
+          <div className={styles.userBadge}>
+            <div
+              className={styles.userAvatar}
+              style={{
+                background: isAdmin
+                  ? 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)'
+                  : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+              }}
+            >
+              {userInitial}
+            </div>
+            <div>
+              <div className={styles.userName}>
+                {user.nombres} {user.apellidos}
+              </div>
+            </div>
+            <span
+              className={`${styles.roleTag} ${
+                isAdmin ? styles.roleTagAdmin : styles.roleTagUser
+              }`}
+            >
+              {roleName}
+            </span>
+          </div>
 
-        {/* User info card */}
-        <div style={{
-          background: 'rgba(255,255,255,0.03)',
-          border: '1px solid rgba(99,102,241,0.12)',
-          borderRadius: '12px',
-          padding: '1.25rem',
-          marginBottom: '2rem',
-          textAlign: 'left',
-        }}>
-          <InfoRow label="Correo" value={user.email} />
-          <InfoRow 
-            label="Rol" 
-            value={typeof user.rol === 'string' ? user.rol : (user.rol?.nombre ?? '—')} 
-          />
-          {user.permisos && user.permisos.length > 0 && (
-            <InfoRow label="Permisos Activos" value={`${user.permisos.length} permisos`} />
-          )}
+          {/* Logout button */}
+          <button
+            id="btn-logout"
+            type="button"
+            className={styles.btnLogout}
+            onClick={handleLogout}
+            title="Cerrar sesión segura"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+            Salir
+          </button>
         </div>
+      </header>
 
-        {/* Logout */}
-        <button
-          id="btn-logout"
-          onClick={handleLogout}
-          style={{
-            background: 'rgba(244,63,94,0.12)',
-            border: '1px solid rgba(244,63,94,0.3)',
-            borderRadius: '8px',
-            padding: '0.7rem 1.5rem',
-            color: '#f43f5e',
-            fontWeight: 600,
-            fontSize: '0.9rem',
-            cursor: 'pointer',
-            transition: 'background 150ms ease',
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(244,63,94,0.22)')}
-          onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(244,63,94,0.12)')}
-        >
-          Cerrar sesión
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.4rem 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-      <span style={{ color: '#64748b', fontSize: '0.85rem' }}>{label}</span>
-      <span style={{ color: '#cbd5e1', fontSize: '0.85rem', fontWeight: 500 }}>{value}</span>
+      {/* Main Content Area: Renders the appropriate role-based dashboard */}
+      <main className={styles.main}>
+        {isAdmin ? (
+          <AdminDashboard />
+        ) : (
+          <UserDashboard initialUser={user} />
+        )}
+      </main>
     </div>
   );
 }

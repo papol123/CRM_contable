@@ -4,9 +4,11 @@ import { User } from '../../database/entities/user.entity';
 import { Role } from '../../database/entities/role.entity';
 import { Permission } from '../../database/entities/permission.entity';
 import { UsersService } from './users.service';
+import { UsersController } from './controllers/users.controller';
 
 @Module({
   imports: [TypeOrmModule.forFeature([User, Role, Permission])],
+  controllers: [UsersController],
   providers: [UsersService],
   exports: [UsersService, TypeOrmModule],
 })
