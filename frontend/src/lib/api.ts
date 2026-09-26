@@ -171,3 +171,110 @@ export async function deleteUser(id: string): Promise<{ message: string }> {
     method: 'DELETE',
   });
 }
+
+// ─── Inspector de Solicitudes HTTP ──────────────────────────────────────────
+
+export interface HttpResponseDetail<T = unknown> {
+  id: string;
+  endpoint: string;
+  method: string;
+  statusCode: number;
+  statusText: string;
+  data: T | null;
+  error?: string;
+  timestamp: string;
+  durationMs: number;
+  payloadSent?: unknown;
+}
+
+/**
+ * Ejecuta una petición HTTP contra el backend registrando la metadata completa
+ * (status code, payload devuelto, error, tiempo de respuesta y datos enviados),
+ * tanto para respuestas exitosas (200, 201, 204) como con errores o bloqueos (403, 404, 401).
+ */
+export async function requestInspect<T = unknown>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<HttpResponseDetail<T>> {
+  const startTime = performance.now();
+  const token = getToken();
+  const headers = new Headers(options.headers || {});
+  const method = (options.method || 'GET').toUpperCase();
+
+  if (!headers.has('Content-Type') && !(options.body instanceof FormData) && method !== 'GET') {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  const config: RequestInit = {
+    ...options,
+    method,
+    headers,
+    credentials: 'include',
+  };
+
+  const id = `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  let payloadSent: unknown = undefined;
+  if (options.body && typeof options.body === 'string') {
+    try {
+      payloadSent = JSON.parse(options.body);
+    } catch {
+      payloadSent = options.body;
+    }
+  }
+
+  try {
+    const response = await fetch(`${API_URL}${endpoint}`, config);
+    const durationMs = Math.round(performance.now() - startTime);
+
+    let data: any = null;
+    if (response.status === 204) {
+      data = { message: '204 No Content - Operación exitosa sin cuerpo devuelto' };
+    } else {
+      const text = await response.text();
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = text;
+      }
+    }
+
+    const hasError = !response.ok;
+    const errorMessage = hasError
+      ? Array.isArray(data?.message)
+        ? data.message.join('. ')
+        : data?.message || data?.error || `Error HTTP ${response.status}: ${response.statusText}`
+      : undefined;
+
+    return {
+      id,
+      endpoint,
+      method,
+      statusCode: response.status,
+      statusText: response.statusText || (response.ok ? 'OK' : 'Error'),
+      data,
+      error: errorMessage,
+      timestamp: new Date().toLocaleTimeString(),
+      durationMs,
+      payloadSent,
+    };
+  } catch (err: unknown) {
+    const durationMs = Math.round(performance.now() - startTime);
+    return {
+      id,
+      endpoint,
+      method,
+      statusCode: 0,
+      statusText: 'Network Error',
+      data: null,
+      error: err instanceof Error ? err.message : 'Error al comunicarse con el servidor',
+      timestamp: new Date().toLocaleTimeString(),
+      durationMs,
+      payloadSent,
+    };
+  }
+}
+
