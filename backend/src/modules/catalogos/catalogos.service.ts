@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, ILike } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Pais } from '../../database/entities/pais.entity';
 import { Departamento } from '../../database/entities/departamento.entity';
 import { Ciudad } from '../../database/entities/ciudad.entity';
@@ -11,6 +11,9 @@ import { Impuesto } from '../../database/entities/impuesto.entity';
 import { MetodoPago } from '../../database/entities/metodo-pago.entity';
 import { Bodega } from '../../database/entities/bodega.entity';
 import { CategoriaGasto } from '../../database/entities/categoria-gasto.entity';
+import { Marca } from '../../database/entities/marca.entity';
+import { Producto } from '../../database/entities/producto.entity';
+import { CreateMarcaDto, UpdateMarcaDto } from './dto/marca.dto';
 import { CreateCategoriaDto, UpdateCategoriaDto } from './dto/categoria.dto';
 import { CreateBodegaDto, UpdateBodegaDto } from './dto/bodega.dto';
 import {
@@ -43,6 +46,10 @@ export class CatalogosService {
     private readonly bodegaRepository: Repository<Bodega>,
     @InjectRepository(CategoriaGasto)
     private readonly categoriaGastoRepository: Repository<CategoriaGasto>,
+    @InjectRepository(Marca)
+    private readonly marcaRepository: Repository<Marca>,
+    @InjectRepository(Producto)
+    private readonly productoRepository: Repository<Producto>,
   ) {}
 
   // ─── Geografía ─────────────────────────────────────────────────────────────
@@ -110,6 +117,13 @@ export class CatalogosService {
   async deleteCategoria(id: string): Promise<{ message: string }> {
     const cat = await this.categoriaRepository.findOne({ where: { id } });
     if (!cat) throw new NotFoundException(`Categoría con ID ${id} no encontrada`);
+    const productos = await this.productoRepository.count({ where: { idCategoria: id } });
+    const subcategorias = await this.categoriaRepository.count({ where: { idCategoriaPadre: id } });
+    if (productos > 0 || subcategorias > 0) {
+      throw new ConflictException(
+        `La categoría tiene ${productos} producto(s) y ${subcategorias} subcategoría(s) asociadas`,
+      );
+    }
     await this.categoriaRepository.remove(cat);
     return { message: 'Categoría eliminada exitosamente' };
   }
@@ -207,5 +221,46 @@ export class CatalogosService {
     if (!cat) throw new NotFoundException(`Categoría de gasto con ID ${id} no encontrada`);
     Object.assign(cat, dto);
     return this.categoriaGastoRepository.save(cat);
+  }
+
+  // ─── Marcas ────────────────────────────────────────────────────────────────
+
+  async findMarcas(): Promise<Marca[]> {
+    return this.marcaRepository.find({ order: { nombre: 'ASC' } });
+  }
+
+  async createMarca(dto: CreateMarcaDto): Promise<Marca> {
+    const nombre = dto.nombre.trim();
+    const existente = await this.marcaRepository.findOne({ where: { nombre } });
+    if (existente) throw new ConflictException(`Ya existe la marca ${nombre}`);
+    return this.marcaRepository.save(
+      this.marcaRepository.create({ nombre, paisOrigen: dto.paisOrigen, activo: true }),
+    );
+  }
+
+  async updateMarca(id: string, dto: UpdateMarcaDto): Promise<Marca> {
+    const marca = await this.marcaRepository.findOne({ where: { id } });
+    if (!marca) throw new NotFoundException(`Marca con ID ${id} no encontrada`);
+    if (dto.nombre && dto.nombre.trim() !== marca.nombre) {
+      const existente = await this.marcaRepository.findOne({ where: { nombre: dto.nombre.trim() } });
+      if (existente) throw new ConflictException(`Ya existe la marca ${dto.nombre.trim()}`);
+      marca.nombre = dto.nombre.trim();
+    }
+    if (dto.paisOrigen !== undefined) marca.paisOrigen = dto.paisOrigen;
+    if (dto.activo !== undefined) marca.activo = dto.activo;
+    return this.marcaRepository.save(marca);
+  }
+
+  /** Si hay productos con la marca solo se desactiva; si no, se elimina. */
+  async deleteMarca(id: string): Promise<{ message: string }> {
+    const marca = await this.marcaRepository.findOne({ where: { id } });
+    if (!marca) throw new NotFoundException(`Marca con ID ${id} no encontrada`);
+    const productos = await this.productoRepository.count({ where: { idMarca: id } });
+    if (productos > 0) {
+      await this.marcaRepository.update(id, { activo: false });
+      return { message: `Marca ${marca.nombre} desactivada (tiene ${productos} producto(s) asociados)` };
+    }
+    await this.marcaRepository.remove(marca);
+    return { message: `Marca ${marca.nombre} eliminada` };
   }
 }

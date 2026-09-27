@@ -73,7 +73,7 @@ export default function UserDashboard({ initialUser }: UserDashboardProps) {
     }
   }
 
-  // Interactive RBAC test: try calling GET /users (which requires 'usuarios.gestionar')
+  // Interactive RBAC test: try calling GET /usuarios (which requires 'usuarios.gestionar')
   async function handleTestRbacSecurity() {
     setIsTestingRbac(true);
     setSecurityTestResult({ status: null, message: '' });
@@ -82,7 +82,7 @@ export default function UserDashboard({ initialUser }: UserDashboardProps) {
       // If it succeeded (which should not happen for a regular user)
       setSecurityTestResult({
         status: 'success',
-        message: 'Acceso concedido a /users.',
+        message: 'Acceso concedido a /usuarios.',
         details: 'El endpoint respondió satisfactoriamente.',
       });
     } catch (err: unknown) {
@@ -385,7 +385,7 @@ export default function UserDashboard({ initialUser }: UserDashboardProps) {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
               <div>
                 <strong style={{ fontSize: '0.9rem', color: '#f1f5f9' }}>
-                  Prueba de Enforzamiento RBAC en Vivo (GET /api/v1/users)
+                  Prueba de Enforzamiento RBAC en Vivo (GET /api/v1/usuarios)
                 </strong>
                 <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '0.15rem' }}>
                   Envía una solicitud HTTP real al endpoint protegido para verificar que el servidor devuelve 403 Forbidden.

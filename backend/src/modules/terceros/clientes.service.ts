@@ -2,10 +2,9 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
-  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { Cliente } from '../../database/entities/cliente.entity';
 import { Tercero } from '../../database/entities/tercero.entity';
 import { Telefono, Email, Direccion } from '../../database/entities/contacto-datos.entity';
@@ -15,10 +14,13 @@ import {
   UpdateCupoCreditoDto,
 } from './dto/cliente.dto';
 import { AddTelefonoDto, AddEmailDto } from './dto/proveedor-datos.dto';
+import { consultarSaldosVenta, SQL_TOTAL_FACTURA_VENTA } from '../../common/documentos/saldos';
+import { redondear } from '../../common/documentos/totales';
 
 @Injectable()
 export class ClientesService {
   constructor(
+    private readonly dataSource: DataSource,
     @InjectRepository(Cliente)
     private readonly clienteRepository: Repository<Cliente>,
     @InjectRepository(Tercero)
@@ -27,8 +29,6 @@ export class ClientesService {
     private readonly telefonoRepository: Repository<Telefono>,
     @InjectRepository(Email)
     private readonly emailRepository: Repository<Email>,
-    @InjectRepository(Direccion)
-    private readonly direccionRepository: Repository<Direccion>,
   ) {}
 
   async findAll(search?: string, ciudadId?: string): Promise<Cliente[]> {
@@ -74,7 +74,7 @@ export class ClientesService {
 
   async create(dto: CreateClienteDto): Promise<Cliente> {
     const existing = await this.terceroRepository.findOne({
-      where: { numeroDocumento: dto.numeroDocumento },
+      where: { numeroDocumento: dto.numeroDocumento.trim() },
     });
     if (existing) {
       throw new ConflictException(
@@ -82,76 +82,87 @@ export class ClientesService {
       );
     }
 
-    const tercero = this.terceroRepository.create({
-      idTipoDocumento: dto.idTipoDocumento,
-      numeroDocumento: dto.numeroDocumento,
-      razonSocial: dto.razonSocial,
-      tipoPersona: dto.tipoPersona,
-      idCiudad: dto.idCiudad,
-      activo: true,
+    // Tercero, datos de contacto y cliente se crean juntos o no se crea nada
+    const idCliente = await this.dataSource.transaction(async (manager) => {
+      const tercero = await manager.save(
+        Tercero,
+        manager.create(Tercero, {
+          idTipoDocumento: dto.idTipoDocumento,
+          numeroDocumento: dto.numeroDocumento.trim(),
+          razonSocial: dto.razonSocial.trim(),
+          tipoPersona: dto.tipoPersona,
+          idCiudad: dto.idCiudad,
+          responsabilidadesFiscales: dto.responsabilidadesFiscales,
+          activo: true,
+        }),
+      );
+
+      if (dto.telefono) {
+        await manager.save(Telefono, {
+          idTercero: tercero.id,
+          numero: dto.telefono,
+          tipo: 'MOVIL',
+          principal: true,
+        });
+      }
+      if (dto.email) {
+        await manager.save(Email, {
+          idTercero: tercero.id,
+          email: dto.email,
+          tipo: 'GENERAL',
+          principal: true,
+        });
+      }
+      if (dto.direccion) {
+        await manager.save(Direccion, {
+          idTercero: tercero.id,
+          idCiudad: dto.idCiudad,
+          direccion: dto.direccion,
+          tipo: 'PRINCIPAL',
+          principal: true,
+        });
+      }
+
+      const cliente = await manager.save(
+        Cliente,
+        manager.create(Cliente, {
+          idTercero: tercero.id,
+          cupoCredito: dto.cupoCredito || 0,
+          diasPlazo: dto.diasPlazo || 0,
+        }),
+      );
+      return cliente.id;
     });
-    const savedTercero = await this.terceroRepository.save(tercero);
 
-    if (dto.telefono) {
-      const tel = this.telefonoRepository.create({
-        idTercero: savedTercero.id,
-        numero: dto.telefono,
-        tipo: 'MOVIL',
-        principal: true,
-      });
-      await this.telefonoRepository.save(tel);
-    }
-
-    if (dto.email) {
-      const em = this.emailRepository.create({
-        idTercero: savedTercero.id,
-        email: dto.email,
-        tipo: 'GENERAL',
-        principal: true,
-      });
-      await this.emailRepository.save(em);
-    }
-
-    if (dto.direccion) {
-      const dir = this.direccionRepository.create({
-        idTercero: savedTercero.id,
-        idCiudad: dto.idCiudad,
-        direccion: dto.direccion,
-        tipo: 'PRINCIPAL',
-        principal: true,
-      });
-      await this.direccionRepository.save(dir);
-    }
-
-    const cliente = this.clienteRepository.create({
-      idTercero: savedTercero.id,
-      cupoCredito: dto.cupoCredito || 0,
-      diasPlazo: dto.diasPlazo || 0,
-    });
-    await this.clienteRepository.save(cliente);
-
-    return this.findById(cliente.id);
+    return this.findById(idCliente);
   }
 
   async update(id: string, dto: UpdateClienteDto): Promise<Cliente> {
     const cliente = await this.findById(id);
 
-    if (dto.razonSocial || dto.tipoPersona || dto.idCiudad !== undefined || dto.activo !== undefined) {
-      Object.assign(cliente.tercero, {
-        ...(dto.razonSocial ? { razonSocial: dto.razonSocial } : {}),
+    if (
+      dto.razonSocial ||
+      dto.tipoPersona ||
+      dto.idCiudad !== undefined ||
+      dto.activo !== undefined ||
+      dto.responsabilidadesFiscales !== undefined
+    ) {
+      await this.terceroRepository.update(cliente.tercero.id, {
+        ...(dto.responsabilidadesFiscales !== undefined
+          ? { responsabilidadesFiscales: dto.responsabilidadesFiscales }
+          : {}),
+        ...(dto.razonSocial ? { razonSocial: dto.razonSocial.trim() } : {}),
         ...(dto.tipoPersona ? { tipoPersona: dto.tipoPersona } : {}),
         ...(dto.idCiudad !== undefined ? { idCiudad: dto.idCiudad } : {}),
         ...(dto.activo !== undefined ? { activo: dto.activo } : {}),
       });
-      await this.terceroRepository.save(cliente.tercero);
     }
 
     if (dto.cupoCredito !== undefined || dto.diasPlazo !== undefined) {
-      Object.assign(cliente, {
+      await this.clienteRepository.update(id, {
         ...(dto.cupoCredito !== undefined ? { cupoCredito: dto.cupoCredito } : {}),
         ...(dto.diasPlazo !== undefined ? { diasPlazo: dto.diasPlazo } : {}),
       });
-      await this.clienteRepository.save(cliente);
     }
 
     return this.findById(id);
@@ -159,8 +170,7 @@ export class ClientesService {
 
   async remove(id: string): Promise<{ message: string }> {
     const cliente = await this.findById(id);
-    cliente.tercero.activo = false;
-    await this.terceroRepository.save(cliente.tercero);
+    await this.terceroRepository.update(cliente.tercero.id, { activo: false });
     return { message: 'Cliente desactivado exitosamente (borrado lógico)' };
   }
 
@@ -171,11 +181,9 @@ export class ClientesService {
 
   async addTelefono(id: string, dto: AddTelefonoDto): Promise<Telefono> {
     const cliente = await this.findById(id);
-    const tel = this.telefonoRepository.create({
-      idTercero: cliente.tercero.id,
-      ...dto,
-    });
-    return this.telefonoRepository.save(tel);
+    return this.telefonoRepository.save(
+      this.telefonoRepository.create({ idTercero: cliente.tercero.id, ...dto }),
+    );
   }
 
   async removeTelefono(id: string, telId: string): Promise<{ message: string }> {
@@ -195,80 +203,76 @@ export class ClientesService {
 
   async addCorreo(id: string, dto: AddEmailDto): Promise<Email> {
     const cliente = await this.findById(id);
-    const em = this.emailRepository.create({
-      idTercero: cliente.tercero.id,
-      ...dto,
-    });
-    return this.emailRepository.save(em);
+    return this.emailRepository.save(
+      this.emailRepository.create({ idTercero: cliente.tercero.id, ...dto }),
+    );
   }
 
   async findHistorialCompras(id: string) {
     const cliente = await this.findById(id);
+    const facturas = await this.dataSource.query(
+      `SELECT f.id_factura_venta AS "idFactura", f.numero_venta AS "numeroFactura",
+              to_char(f.fecha_expedicion, 'YYYY-MM-DD') AS fecha, e.codigo AS estado, f.anulada,
+              ${SQL_TOTAL_FACTURA_VENTA('f')} AS total,
+              (SELECT COUNT(*) FROM detalle_factura_venta d WHERE d.id_factura_venta = f.id_factura_venta) AS items
+         FROM facturas_venta f
+         JOIN estados_factura_venta e ON e.id_estado = f.id_estado
+        WHERE f.id_cliente = $1
+        ORDER BY f.fecha_expedicion DESC, f.numero_venta DESC`,
+      [id],
+    );
+    const historial = facturas.map((f: any) => ({ ...f, total: Number(f.total), items: Number(f.items) }));
+    const vigentes = historial.filter((f: any) => !f.anulada);
+
     return {
       clienteId: cliente.id,
       razonSocial: cliente.tercero.razonSocial,
       documento: cliente.tercero.numeroDocumento,
-      totalFacturas: 3,
-      totalComprado: 3850000.00,
-      historial: [
-        {
-          numeroFactura: 'FAC-001045',
-          fecha: '2026-03-10',
-          total: 1250000.00,
-          estado: 'PAGADA',
-          items: 4,
-        },
-        {
-          numeroFactura: 'FAC-001089',
-          fecha: '2026-03-18',
-          total: 2600000.00,
-          estado: 'PENDIENTE',
-          items: 6,
-        },
-      ],
+      totalFacturas: vigentes.length,
+      totalComprado: redondear(vigentes.reduce((acc: number, f: any) => acc + f.total, 0)),
+      historial,
     };
   }
 
   async findCartera(id: string) {
     const cliente = await this.findById(id);
+    const pendientes = await consultarSaldosVenta(this.dataSource.manager, {
+      idContraparte: id,
+      soloConSaldo: true,
+    });
+    const saldoPendiente = redondear(pendientes.reduce((acc, f) => acc + f.saldo, 0));
+    const saldoVencido = redondear(
+      pendientes.filter((f) => f.diasMora > 0).reduce((acc, f) => acc + f.saldo, 0),
+    );
+
     return {
       clienteId: cliente.id,
       razonSocial: cliente.tercero.razonSocial,
-      cupoCredito: cliente.cupoCredito,
+      cupoCredito: Number(cliente.cupoCredito),
       diasPlazo: cliente.diasPlazo,
-      saldoPendiente: 2600000.00,
-      creditoDisponible: Number(cliente.cupoCredito) - 2600000.00,
-      diasMoraMaximo: 8,
-      facturasPendientes: [
-        {
-          idFactura: 'f1a2b3c4-0000-0000-0000-000000000001',
-          numeroVenta: 'FAC-001089',
-          fechaExpedicion: '2026-03-18',
-          fechaVencimiento: '2026-04-18',
-          total: 2600000.00,
-          saldo: 2600000.00,
-          estado: 'PENDIENTE',
-        },
-      ],
+      saldoPendiente,
+      saldoVencido,
+      creditoDisponible: redondear(Math.max(0, Number(cliente.cupoCredito) - saldoPendiente)),
+      diasMoraMaximo: pendientes.reduce((max, f) => Math.max(max, f.diasMora), 0),
+      facturasPendientes: pendientes,
     };
   }
 
   async updateCupoCredito(id: string, dto: UpdateCupoCreditoDto): Promise<Cliente> {
-    const cliente = await this.findById(id);
-    cliente.cupoCredito = dto.cupoCredito;
-    cliente.diasPlazo = dto.diasPlazo;
-    return this.clienteRepository.save(cliente);
+    await this.findById(id);
+    await this.clienteRepository.update(id, { cupoCredito: dto.cupoCredito, diasPlazo: dto.diasPlazo });
+    return this.findById(id);
   }
 
   async bloquearCredito(id: string): Promise<Cliente> {
-    const cliente = await this.findById(id);
-    cliente.cupoCredito = 0;
-    return this.clienteRepository.save(cliente);
+    await this.findById(id);
+    await this.clienteRepository.update(id, { cupoCredito: 0 });
+    return this.findById(id);
   }
 
   async desbloquearCredito(id: string, nuevoCupo: number = 5000000): Promise<Cliente> {
-    const cliente = await this.findById(id);
-    cliente.cupoCredito = nuevoCupo;
-    return this.clienteRepository.save(cliente);
+    await this.findById(id);
+    await this.clienteRepository.update(id, { cupoCredito: nuevoCupo });
+    return this.findById(id);
   }
 }

@@ -25,6 +25,7 @@ import {
   CreateCategoriaGastoDto,
   UpdateCategoriaGastoDto,
 } from './dto/impuesto-gasto.dto';
+import { CreateMarcaDto, UpdateMarcaDto } from './dto/marca.dto';
 
 @ApiTags('Catálogos')
 @ApiBearerAuth()
@@ -217,17 +218,31 @@ export class CatalogosController {
   @Get('marcas')
   @ApiOperation({ summary: 'Listar marcas de repuestos y fabricantes' })
   async getMarcas() {
-    return [
-      { id: '1', nombre: 'Brembo', origen: 'Italia' },
-      { id: '2', nombre: 'Fremax', origen: 'Brasil' },
-      { id: '3', nombre: 'Monroe', origen: 'EE.UU.' },
-      { id: '4', nombre: '555 Sankei', origen: 'Japón' },
-      { id: '5', nombre: 'Valeo', origen: 'Francia' },
-      { id: '6', nombre: 'Mobil', origen: 'EE.UU.' },
-      { id: '7', nombre: 'Castrol', origen: 'Reino Unido' },
-      { id: '8', nombre: 'Baterías MAC', origen: 'Colombia' },
-      { id: '9', nombre: 'NGK Spark Plugs', origen: 'Japón' },
-      { id: '10', nombre: 'Bosch', origen: 'Alemania' },
-    ];
+    return this.catalogosService.findMarcas();
+  }
+
+  @Post('marcas')
+  @UseGuards(PermissionsGuard)
+  @RequirePermission('configuracion.gestionar')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Crear marca (solo Administrador)' })
+  async createMarca(@Body() dto: CreateMarcaDto) {
+    return this.catalogosService.createMarca(dto);
+  }
+
+  @Patch('marcas/:id')
+  @UseGuards(PermissionsGuard)
+  @RequirePermission('configuracion.gestionar')
+  @ApiOperation({ summary: 'Actualizar marca (solo Administrador)' })
+  async updateMarca(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateMarcaDto) {
+    return this.catalogosService.updateMarca(id, dto);
+  }
+
+  @Delete('marcas/:id')
+  @UseGuards(PermissionsGuard)
+  @RequirePermission('configuracion.gestionar')
+  @ApiOperation({ summary: 'Eliminar marca (se desactiva si tiene productos)' })
+  async deleteMarca(@Param('id', ParseUUIDPipe) id: string) {
+    return this.catalogosService.deleteMarca(id);
   }
 }

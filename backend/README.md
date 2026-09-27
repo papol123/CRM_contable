@@ -56,15 +56,41 @@ Si un usuario con rol operativo intenta acceder a un endpoint restringido, el si
 
 ---
 
-## 4. Credenciales de Prueba Iniciales (Seed Data)
+## 4. Base de datos: migraciones y datos de prueba
 
-Definidas en el script DDL `crm_contable_schema_postgresql_uuid.sql`:
+```bash
+# 1. Esquema base (si la base está vacía) + migraciones pendientes de database/migrations
+npm run db:migrate
 
-- **Correo:** `admin@crmcontable.com`
-- **Contraseña:** `Admin123*`
-- **Rol:** `ADMIN` (acceso a todos los permisos del catálogo)
+# 2. Datos base: geografía, catálogos, estados, roles/permisos y usuarios de prueba.
+#    Es idempotente: solo inserta lo que falte.
+npm run seed
 
----
+# 3. Datos de demostración: ~6 meses simulados de compras, ventas, pagos, gastos,
+#    cotizaciones y pedidos. Falla si ya hay productos o facturas.
+npm run seed:demo
+npm run seed:demo -- --reset          # borra la demo anterior y la regenera (solo base local)
+npm run seed:demo -- --reset --force  # permite --reset contra una base remota (¡borra datos!)
+npm run seed:demo -- --dias=90        # simula otro número de días
+
+# Todo lo anterior en un paso
+npm run db:setup
+```
+
+Los datos editables de cada seed están en `scripts/data/base.js` y `scripts/data/demo.js`.
+
+### Usuarios de prueba (contraseña `Admin123*`)
+
+| Correo | Rol |
+|---|---|
+| `admin@crmcontable.com`, `gerencia@crmcontable.com` | ADMIN |
+| `usuario@crmcontable.com`, `vendedor@crmcontable.com`, `operador@crmcontable.com`, `caja@crmcontable.com` | USUARIO |
+
+### Variables de entorno obligatorias
+
+- `JWT_SECRET`: el backend no arranca sin ella (ya no hay un secreto por defecto).
+- `FRONTEND_URL`: origen(es) permitidos por CORS, separados por coma. Con `NODE_ENV=production` solo se aceptan estos; en desarrollo se aceptan además `localhost` y `127.0.0.1`.
+- `APP_TIMEZONE` (opcional, por defecto `America/Bogota`): zona usada para la fecha de "hoy".
 
 ## 5. Comandos de Ejecución
 

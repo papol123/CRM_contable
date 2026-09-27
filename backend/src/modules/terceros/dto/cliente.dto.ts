@@ -59,6 +59,11 @@ export class CreateClienteDto {
   @IsOptional()
   @IsString()
   direccion?: string;
+
+  @ApiPropertyOptional({ example: 'O-13;O-15', description: "Responsabilidades fiscales DIAN separadas por ';' (vacío = R-99-PN)" })
+  @IsOptional()
+  @IsString()
+  responsabilidadesFiscales?: string;
 }
 
 export class UpdateClienteDto {
@@ -91,6 +96,11 @@ export class UpdateClienteDto {
   @IsOptional()
   @IsBoolean()
   activo?: boolean;
+
+  @ApiPropertyOptional({ example: 'O-13;O-15', description: "Responsabilidades fiscales DIAN separadas por ';' (vacío = R-99-PN)" })
+  @IsOptional()
+  @IsString()
+  responsabilidadesFiscales?: string;
 }
 
 export class UpdateCupoCreditoDto {

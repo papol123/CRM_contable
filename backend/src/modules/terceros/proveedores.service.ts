@@ -4,23 +4,22 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { Proveedor } from '../../database/entities/proveedor.entity';
 import { Tercero } from '../../database/entities/tercero.entity';
 import { Telefono, Email } from '../../database/entities/contacto-datos.entity';
 import { CreateProveedorDto, UpdateProveedorDto } from './dto/proveedor-datos.dto';
+import { SQL_PAGADO_FACTURA_COMPRA, SQL_TOTAL_FACTURA_COMPRA } from '../../common/documentos/saldos';
+import { redondear } from '../../common/documentos/totales';
 
 @Injectable()
 export class ProveedoresService {
   constructor(
+    private readonly dataSource: DataSource,
     @InjectRepository(Proveedor)
     private readonly proveedorRepository: Repository<Proveedor>,
     @InjectRepository(Tercero)
     private readonly terceroRepository: Repository<Tercero>,
-    @InjectRepository(Telefono)
-    private readonly telefonoRepository: Repository<Telefono>,
-    @InjectRepository(Email)
-    private readonly emailRepository: Repository<Email>,
   ) {}
 
   async findAll(search?: string): Promise<Proveedor[]> {
@@ -62,7 +61,7 @@ export class ProveedoresService {
 
   async create(dto: CreateProveedorDto): Promise<Proveedor> {
     const existing = await this.terceroRepository.findOne({
-      where: { numeroDocumento: dto.numeroDocumento },
+      where: { numeroDocumento: dto.numeroDocumento.trim() },
     });
     if (existing) {
       throw new ConflictException(
@@ -70,60 +69,59 @@ export class ProveedoresService {
       );
     }
 
-    const tercero = this.terceroRepository.create({
-      idTipoDocumento: dto.idTipoDocumento,
-      numeroDocumento: dto.numeroDocumento,
-      razonSocial: dto.razonSocial,
-      tipoPersona: dto.tipoPersona,
-      idCiudad: dto.idCiudad,
-      activo: true,
+    const idProveedor = await this.dataSource.transaction(async (manager) => {
+      const tercero = await manager.save(
+        Tercero,
+        manager.create(Tercero, {
+          idTipoDocumento: dto.idTipoDocumento,
+          numeroDocumento: dto.numeroDocumento.trim(),
+          razonSocial: dto.razonSocial.trim(),
+          tipoPersona: dto.tipoPersona,
+          idCiudad: dto.idCiudad,
+          activo: true,
+        }),
+      );
+
+      if (dto.telefono) {
+        await manager.save(Telefono, {
+          idTercero: tercero.id,
+          numero: dto.telefono,
+          tipo: 'FIJO',
+          principal: true,
+        });
+      }
+      if (dto.email) {
+        await manager.save(Email, {
+          idTercero: tercero.id,
+          email: dto.email,
+          tipo: 'VENTAS',
+          principal: true,
+        });
+      }
+
+      const proveedor = await manager.save(
+        Proveedor,
+        manager.create(Proveedor, { idTercero: tercero.id, diasPlazo: dto.diasPlazo || 0 }),
+      );
+      return proveedor.id;
     });
-    const savedTercero = await this.terceroRepository.save(tercero);
 
-    if (dto.telefono) {
-      const tel = this.telefonoRepository.create({
-        idTercero: savedTercero.id,
-        numero: dto.telefono,
-        tipo: 'FIJO',
-        principal: true,
-      });
-      await this.telefonoRepository.save(tel);
-    }
-
-    if (dto.email) {
-      const em = this.emailRepository.create({
-        idTercero: savedTercero.id,
-        email: dto.email,
-        tipo: 'VENTAS',
-        principal: true,
-      });
-      await this.emailRepository.save(em);
-    }
-
-    const proveedor = this.proveedorRepository.create({
-      idTercero: savedTercero.id,
-      diasPlazo: dto.diasPlazo || 0,
-    });
-    await this.proveedorRepository.save(proveedor);
-
-    return this.findById(proveedor.id);
+    return this.findById(idProveedor);
   }
 
   async update(id: string, dto: UpdateProveedorDto): Promise<Proveedor> {
     const proveedor = await this.findById(id);
 
     if (dto.razonSocial || dto.idCiudad !== undefined || dto.activo !== undefined) {
-      Object.assign(proveedor.tercero, {
-        ...(dto.razonSocial ? { razonSocial: dto.razonSocial } : {}),
+      await this.terceroRepository.update(proveedor.tercero.id, {
+        ...(dto.razonSocial ? { razonSocial: dto.razonSocial.trim() } : {}),
         ...(dto.idCiudad !== undefined ? { idCiudad: dto.idCiudad } : {}),
         ...(dto.activo !== undefined ? { activo: dto.activo } : {}),
       });
-      await this.terceroRepository.save(proveedor.tercero);
     }
 
     if (dto.diasPlazo !== undefined) {
-      proveedor.diasPlazo = dto.diasPlazo;
-      await this.proveedorRepository.save(proveedor);
+      await this.proveedorRepository.update(id, { diasPlazo: dto.diasPlazo });
     }
 
     return this.findById(id);
@@ -131,76 +129,92 @@ export class ProveedoresService {
 
   async remove(id: string): Promise<{ message: string }> {
     const proveedor = await this.findById(id);
-    proveedor.tercero.activo = false;
-    await this.terceroRepository.save(proveedor.tercero);
+    await this.terceroRepository.update(proveedor.tercero.id, { activo: false });
     return { message: 'Proveedor desactivado exitosamente (borrado lógico)' };
   }
 
   async findHistorialCompras(id: string) {
     const proveedor = await this.findById(id);
+    const filas = await this.dataSource.query(
+      `SELECT fc.id_factura_compra AS "idFacturaCompra", fc.numero_factura AS "numeroFactura",
+              to_char(fc.fecha_emision, 'YYYY-MM-DD') AS "fechaEmision",
+              to_char(fc.fecha_vencimiento, 'YYYY-MM-DD') AS "fechaVencimiento",
+              e.codigo AS estado,
+              ${SQL_TOTAL_FACTURA_COMPRA('fc')} AS monto,
+              ${SQL_PAGADO_FACTURA_COMPRA('fc')} AS pagado
+         FROM facturas_compra fc
+         JOIN estados_factura_compra e ON e.id_estado = fc.id_estado
+        WHERE fc.id_proveedor = $1
+        ORDER BY fc.fecha_emision DESC`,
+      [id],
+    );
+    const compras = filas.map((f: any) => ({
+      ...f,
+      monto: Number(f.monto),
+      pagado: Number(f.pagado),
+      saldo: f.estado === 'ANULADA' ? 0 : redondear(Number(f.monto) - Number(f.pagado)),
+    }));
+    const vigentes = compras.filter((c: any) => c.estado !== 'ANULADA');
+
     return {
       proveedorId: proveedor.id,
       razonSocial: proveedor.tercero.razonSocial,
-      totalCompras: 2,
-      montoTotal: 8450000.00,
-      compras: [
-        {
-          numeroFactura: 'FAC-PROV-9921',
-          fechaEmision: '2026-02-15',
-          monto: 3950000.00,
-          estado: 'PAGADA',
-        },
-        {
-          numeroFactura: 'FAC-PROV-9988',
-          fechaEmision: '2026-03-05',
-          monto: 4500000.00,
-          estado: 'PENDIENTE',
-        },
-      ],
+      totalCompras: vigentes.length,
+      montoTotal: redondear(vigentes.reduce((acc: number, c: any) => acc + c.monto, 0)),
+      saldoPendiente: redondear(vigentes.reduce((acc: number, c: any) => acc + c.saldo, 0)),
+      compras,
     };
   }
 
   async findProductos(id: string) {
     const proveedor = await this.findById(id);
+    const productos = await this.dataSource.query(
+      `SELECT p.id_producto AS "idProducto", p.codigo, p.nombre,
+              pp.codigo_proveedor AS "codigoProveedor", pp.costo_actual AS "costoActual",
+              pp.dias_entrega AS "diasEntrega", pp.es_principal AS "esPrincipal"
+         FROM producto_proveedor pp
+         JOIN productos p ON p.id_producto = pp.id_producto
+        WHERE pp.id_proveedor = $1
+        ORDER BY p.codigo`,
+      [id],
+    );
     return {
       proveedorId: proveedor.id,
       razonSocial: proveedor.tercero.razonSocial,
-      productosSuministrados: [
-        {
-          codigo: 'REP-FRE-001',
-          nombre: 'Pastillas de Freno Delanteras Brembo Cerámica',
-          codigoProveedor: 'BRM-P06024N',
-          costoActual: 120000.00,
-          diasEntrega: 3,
-        },
-        {
-          codigo: 'REP-FRE-002',
-          nombre: 'Disco de Freno Ventilado Delantero Fremax',
-          codigoProveedor: 'FMX-BD5421',
-          costoActual: 185000.00,
-          diasEntrega: 3,
-        },
-      ],
+      productosSuministrados: productos.map((p: any) => ({
+        ...p,
+        costoActual: p.costoActual === null ? null : Number(p.costoActual),
+      })),
     };
   }
 
   async compararPrecios(productoId: string) {
+    const [producto] = await this.dataSource.query(
+      `SELECT id_producto, codigo, nombre FROM productos WHERE id_producto = $1`,
+      [productoId],
+    );
+    if (!producto) throw new NotFoundException(`Producto con ID ${productoId} no encontrado`);
+
+    const comparativa = await this.dataSource.query(
+      `SELECT pr.id_proveedor AS "idProveedor", t.razon_social AS proveedor,
+              pp.codigo_proveedor AS "codigoProveedor", pp.costo_actual AS costo,
+              pp.dias_entrega AS "diasEntrega", pp.es_principal AS "esPrincipal"
+         FROM producto_proveedor pp
+         JOIN proveedores pr ON pr.id_proveedor = pp.id_proveedor
+         JOIN terceros t ON t.id_tercero = pr.id_tercero
+        WHERE pp.id_producto = $1
+        ORDER BY pp.costo_actual ASC NULLS LAST`,
+      [productoId],
+    );
+
     return {
       productoId,
-      comparativa: [
-        {
-          proveedor: 'Importadora Frenos & Suspensiones del Valle SAS',
-          costo: 120000.00,
-          diasEntrega: 3,
-          esPrincipal: true,
-        },
-        {
-          proveedor: 'Distribuidora Automotriz de Colombia SAS',
-          costo: 126000.00,
-          diasEntrega: 2,
-          esPrincipal: false,
-        },
-      ],
+      codigo: producto.codigo,
+      nombre: producto.nombre,
+      comparativa: comparativa.map((c: any) => ({
+        ...c,
+        costo: c.costo === null ? null : Number(c.costo),
+      })),
     };
   }
 }

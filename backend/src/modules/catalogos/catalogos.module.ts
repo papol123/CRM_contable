@@ -10,6 +10,8 @@ import { Impuesto } from '../../database/entities/impuesto.entity';
 import { MetodoPago } from '../../database/entities/metodo-pago.entity';
 import { Bodega } from '../../database/entities/bodega.entity';
 import { CategoriaGasto } from '../../database/entities/categoria-gasto.entity';
+import { Marca } from '../../database/entities/marca.entity';
+import { Producto } from '../../database/entities/producto.entity';
 import { CatalogosController } from './catalogos.controller';
 import { CatalogosService } from './catalogos.service';
 
@@ -26,6 +28,8 @@ import { CatalogosService } from './catalogos.service';
       MetodoPago,
       Bodega,
       CategoriaGasto,
+      Marca,
+      Producto,
     ]),
   ],
   controllers: [CatalogosController],

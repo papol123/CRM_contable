@@ -24,6 +24,10 @@ export class ResolucionDian {
   @Column({ name: 'vigente_hasta', type: 'date', nullable: true })
   vigenteHasta?: string;
 
+  /** Clave técnica de la resolución de facturación electrónica (para el CUFE) */
+  @Column({ name: 'clave_tecnica', length: 100, nullable: true })
+  claveTecnica?: string;
+
   @OneToMany(() => FacturaVenta, (factura) => factura.resolucion)
   facturas: FacturaVenta[];
 }

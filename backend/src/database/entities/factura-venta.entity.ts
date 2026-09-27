@@ -2,6 +2,7 @@ import {
   Entity,
   PrimaryGeneratedColumn,
   Column,
+  CreateDateColumn,
   ManyToOne,
   OneToMany,
   JoinColumn,
@@ -51,6 +52,34 @@ export class FacturaVenta {
 
   @Column({ name: 'anulada', default: false })
   anulada: boolean;
+
+  @Column({ name: 'id_bodega', type: 'uuid', nullable: true })
+  idBodega?: string;
+
+  @Column({ name: 'id_usuario', type: 'uuid', nullable: true })
+  idUsuario?: string;
+
+  @Column({ name: 'observaciones', type: 'text', nullable: true })
+  observaciones?: string;
+
+  @Column({ name: 'motivo_anulacion', type: 'text', nullable: true })
+  motivoAnulacion?: string;
+
+  @CreateDateColumn({ name: 'creado_en', type: 'timestamptz' })
+  creadoEn: Date;
+
+  // ─── Facturación electrónica (opcional) ───
+  @Column({ name: 'estado_dian', length: 20, default: 'NO_APLICA' })
+  estadoDian: 'NO_APLICA' | 'PENDIENTE' | 'ENVIADA' | 'ACEPTADA' | 'RECHAZADA';
+
+  @Column({ name: 'cufe', length: 96, nullable: true })
+  cufe?: string;
+
+  @Column({ name: 'fecha_envio_dian', type: 'timestamptz', nullable: true })
+  fechaEnvioDian?: Date;
+
+  @Column({ name: 'respuesta_dian', type: 'text', nullable: true })
+  respuestaDian?: string;
 
   @OneToMany(() => DetalleFacturaVenta, (detalle) => detalle.facturaVenta, {
     cascade: true,

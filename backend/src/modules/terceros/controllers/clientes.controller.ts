@@ -66,7 +66,7 @@ export class ClientesController {
   }
 
   @Delete(':id')
-  @RequirePermission('terceros.editar')
+  @RequirePermission('terceros.eliminar')
   @ApiOperation({ summary: 'Borrado lógico de cliente (solo Administrador)' })
   async remove(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string) {
     return this.clientesService.remove(id);

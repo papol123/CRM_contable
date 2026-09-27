@@ -5,14 +5,21 @@ import { DetalleFacturaVenta } from '../../database/entities/detalle-factura-ven
 import { EstadoFacturaVenta } from '../../database/entities/estado-factura-venta.entity';
 import { ResolucionDian } from '../../database/entities/resolucion-dian.entity';
 import { MovimientoInventario } from '../../database/entities/movimiento-inventario.entity';
-import { Bodega } from '../../database/entities/bodega.entity';
+import { Cotizacion, DetalleCotizacion } from '../../database/entities/cotizacion.entity';
+import {
+  Pedido,
+  DetallePedido,
+  HistorialEstadoPedido,
+} from '../../database/entities/pedido.entity';
 import { FacturasVentaController } from './controllers/facturas-venta.controller';
 import {
   CotizacionesController,
   PedidosController,
   ResolucionesController,
 } from './controllers/ventas-documentos.controller';
-import { VentasService } from './ventas.service';
+import { FacturasVentaService } from './facturas-venta.service';
+import { CotizacionesService } from './cotizaciones.service';
+import { PedidosService } from './pedidos.service';
 
 @Module({
   imports: [
@@ -22,7 +29,11 @@ import { VentasService } from './ventas.service';
       EstadoFacturaVenta,
       ResolucionDian,
       MovimientoInventario,
-      Bodega,
+      Cotizacion,
+      DetalleCotizacion,
+      Pedido,
+      DetallePedido,
+      HistorialEstadoPedido,
     ]),
   ],
   controllers: [
@@ -31,7 +42,7 @@ import { VentasService } from './ventas.service';
     PedidosController,
     ResolucionesController,
   ],
-  providers: [VentasService],
-  exports: [VentasService],
+  providers: [FacturasVentaService, CotizacionesService, PedidosService],
+  exports: [FacturasVentaService],
 })
 export class VentasModule {}

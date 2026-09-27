@@ -2,9 +2,10 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { Producto } from '../../database/entities/producto.entity';
 import { PrecioProducto, ListaPrecios } from '../../database/entities/precio-proveedor.entity';
 import { MovimientoInventario } from '../../database/entities/movimiento-inventario.entity';
@@ -15,6 +16,11 @@ import {
   UpdateStockMinimoDto,
   PreciosMasivosDto,
 } from './dto/producto.dto';
+import { costoPromedio, sqlCantidadConSigno } from '../../common/inventario/stock';
+import { fechaHoy, sumarDias } from '../../common/utils/fechas';
+import { redondear } from '../../common/documentos/totales';
+
+const LISTA_PUBLICA = 'Precio Público / Mostrador';
 
 @Injectable()
 export class ProductosService {
@@ -58,7 +64,7 @@ export class ProductosService {
         const saldoRes = await this.movimientoRepository
           .createQueryBuilder('m')
           .select(
-            `COALESCE(SUM(CASE WHEN m.tipo_movimiento IN ('ENTRADA', 'AJUSTE_ENTRADA') THEN m.cantidad ELSE -m.cantidad END), 0)`,
+            `COALESCE(SUM(${sqlCantidadConSigno('m')}), 0)`,
             'saldo',
           )
           .where('m.id_producto = :id', { id: prod.id })
@@ -110,7 +116,7 @@ export class ProductosService {
       .addSelect('b.nombre', 'bodegaNombre')
       .addSelect('b.codigo', 'bodegaCodigo')
       .addSelect(
-        `COALESCE(SUM(CASE WHEN m.tipo_movimiento IN ('ENTRADA', 'AJUSTE_ENTRADA') THEN m.cantidad ELSE -m.cantidad END), 0)`,
+        `COALESCE(SUM(${sqlCantidadConSigno('m')}), 0)`,
         'saldo',
       )
       .where('m.id_producto = :id', { id })
@@ -146,6 +152,7 @@ export class ProductosService {
       idImpuestoVenta: dto.idImpuestoVenta,
       manejaInventario: dto.manejaInventario ?? true,
       stockMinimo: dto.stockMinimo ?? 0,
+      idMarca: dto.idMarca,
       activo: true,
     });
     const saved = await this.productoRepository.save(prod);
@@ -153,14 +160,14 @@ export class ProductosService {
     // Asignar precio base a lista pública si se especifica
     if (dto.precioBase) {
       const listaPub = await this.listaPreciosRepository.findOne({
-        where: { nombre: 'Precio Público / Mostrador' },
+        where: { nombre: LISTA_PUBLICA },
       });
       if (listaPub) {
         const precio = this.precioRepository.create({
           idLista: listaPub.id,
           idProducto: saved.id,
           precio: dto.precioBase,
-          vigenteDesde: new Date().toISOString().split('T')[0],
+          vigenteDesde: fechaHoy(),
         });
         await this.precioRepository.save(precio);
       }
@@ -188,14 +195,27 @@ export class ProductosService {
   async updatePrecio(id: string, dto: UpdatePrecioDto): Promise<PrecioProducto> {
     const prod = await this.productoRepository.findOne({ where: { id } });
     if (!prod) throw new NotFoundException(`Producto con ID ${id} no encontrado`);
+    return this.registrarPrecio(id, dto.idLista, dto.precio, dto.vigenteDesde || fechaHoy());
+  }
 
-    const nuevoPrecio = this.precioRepository.create({
-      idProducto: id,
-      idLista: dto.idLista,
-      precio: dto.precio,
-      vigenteDesde: dto.vigenteDesde || new Date().toISOString().split('T')[0],
-    });
-    return this.precioRepository.save(nuevoPrecio);
+  /** Registra un precio nuevo y cierra la vigencia del precio abierto de la misma lista. */
+  private async registrarPrecio(
+    idProducto: string,
+    idLista: string,
+    precio: number,
+    vigenteDesde: string,
+  ): Promise<PrecioProducto> {
+    const lista = await this.listaPreciosRepository.findOne({ where: { id: idLista } });
+    if (!lista) throw new BadRequestException(`La lista de precios ${idLista} no existe`);
+
+    await this.precioRepository.update(
+      { idProducto, idLista, vigenteHasta: IsNull() },
+      { vigenteHasta: sumarDias(vigenteDesde, -1) },
+    );
+
+    return this.precioRepository.save(
+      this.precioRepository.create({ idProducto, idLista, precio, vigenteDesde }),
+    );
   }
 
   async updateStockMinimo(id: string, dto: UpdateStockMinimoDto): Promise<Producto> {
@@ -206,6 +226,8 @@ export class ProductosService {
   }
 
   async historialPrecios(id: string): Promise<PrecioProducto[]> {
+    const prod = await this.productoRepository.findOne({ where: { id } });
+    if (!prod) throw new NotFoundException(`Producto con ID ${id} no encontrado`);
     return this.precioRepository.find({
       where: { idProducto: id },
       relations: ['lista'],
@@ -215,42 +237,56 @@ export class ProductosService {
 
   async getMargen(id: string) {
     const prod = await this.findById(id);
-    const ultimoCosto = 120000.00; // Tomado de producto_proveedor o último movimiento
-    const precioPublico = prod.precios?.find((p: any) => p.lista?.nombre?.includes('Público'))?.precio || 185000;
-    const margenBruto = precioPublico - ultimoCosto;
-    const porcentajeMargen = ((margenBruto / precioPublico) * 100).toFixed(2);
+    const costoAdquisicion = await costoPromedio(this.productoRepository.manager, id);
+
+    const hoy = fechaHoy();
+    const precioVigente = (prod.precios || [])
+      .filter(
+        (p: PrecioProducto) =>
+          p.lista?.nombre === LISTA_PUBLICA &&
+          p.vigenteDesde <= hoy &&
+          (!p.vigenteHasta || p.vigenteHasta >= hoy),
+      )
+      .sort((a: PrecioProducto, b: PrecioProducto) => b.vigenteDesde.localeCompare(a.vigenteDesde))[0];
+
+    if (!precioVigente) {
+      throw new NotFoundException(`El producto ${prod.codigo} no tiene precio público vigente`);
+    }
+
+    const precioPublico = Number(precioVigente.precio);
+    const margenBruto = redondear(precioPublico - costoAdquisicion);
 
     return {
       productoId: id,
       codigo: prod.codigo,
       nombre: prod.nombre,
-      costoAdquisicion: ultimoCosto,
+      costoAdquisicion,
+      metodoCosto: 'Costo promedio ponderado',
       precioPublico,
       margenBruto,
-      porcentajeMargen: `${porcentajeMargen}%`,
+      porcentajeMargen: `${((margenBruto / precioPublico) * 100).toFixed(2)}%`,
     };
   }
 
-  async actualizarPreciosMasivo(dto: PreciosMasivosDto): Promise<{ actualizados: number }> {
-    let count = 0;
-    const fecha = new Date().toISOString().split('T')[0];
+  async actualizarPreciosMasivo(
+    dto: PreciosMasivosDto,
+  ): Promise<{ actualizados: number; noEncontrados: string[] }> {
+    const fecha = fechaHoy();
+    const noEncontrados: string[] = [];
+    let actualizados = 0;
 
     for (const cambio of dto.cambios) {
       const prod = await this.productoRepository.findOne({
         where: { codigo: cambio.codigoProducto },
       });
-      if (prod) {
-        const precio = this.precioRepository.create({
-          idProducto: prod.id,
-          idLista: cambio.idLista,
-          precio: cambio.nuevoPrecio,
-          vigenteDesde: fecha,
-        });
-        await this.precioRepository.save(precio);
-        count++;
+      if (!prod) {
+        noEncontrados.push(cambio.codigoProducto);
+        continue;
       }
+      await this.registrarPrecio(prod.id, cambio.idLista, cambio.nuevoPrecio, fecha);
+      actualizados++;
     }
 
-    return { actualizados: count };
+    return { actualizados, noEncontrados };
   }
 }

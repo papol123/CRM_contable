@@ -11,10 +11,7 @@ import { TipoDocumento } from './tipo-documento.entity';
 import { Ciudad } from './ciudad.entity';
 import { Cliente } from './cliente.entity';
 import { Proveedor } from './proveedor.entity';
-import { Contacto } from './contacto.entity';
-import { Telefono } from './telefono.entity';
-import { Email } from './email.entity';
-import { Direccion } from './direccion.entity';
+import { Contacto, Telefono, Email, Direccion } from './contacto-datos.entity';
 
 @Entity({ name: 'terceros' })
 export class Tercero {
@@ -46,6 +43,10 @@ export class Tercero {
 
   @Column({ name: 'activo', default: true })
   activo: boolean;
+
+  /** Códigos DIAN separados por ';'. Vacío equivale a R-99-PN (no aplica) */
+  @Column({ name: 'responsabilidades_fiscales', length: 100, nullable: true })
+  responsabilidadesFiscales?: string;
 
   @OneToOne(() => Cliente, (c) => c.tercero)
   cliente?: Cliente;

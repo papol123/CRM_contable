@@ -61,18 +61,17 @@ export async function loginRequest(credentials: LoginCredentials): Promise<AuthR
     throw new Error('El backend no está corriendo. En la carpeta del backend ejecuta npm run start:dev');
   }
 
-  if (res.status === 401) {
-    throw new Error('Email o contraseña incorrectos, o ese usuario no existe en la base');
-  }
-
-  if (res.status === 404) {
-    throw new Error('La ruta no existe todavía o su prefijo no es /api/v1');
-  }
-
   if (!res.ok) {
+    // El backend distingue credenciales inválidas de usuario inactivo: se muestra su mensaje
     const error = await res.json().catch(() => ({}));
     const message = Array.isArray(error.message) ? error.message.join('. ') : error.message;
-    throw new Error(message || `Error del servidor (${res.status})`);
+    const porDefecto =
+      res.status === 401
+        ? 'Email o contraseña incorrectos, o ese usuario no existe en la base'
+        : res.status === 404
+          ? 'La ruta no existe todavía o su prefijo no es /api/v1'
+          : `Error del servidor (${res.status})`;
+    throw new Error(message || porDefecto);
   }
 
   return res.json();

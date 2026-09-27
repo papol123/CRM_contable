@@ -52,6 +52,15 @@ export class FacturaCompra {
   @Column({ name: 'fecha_vencimiento', type: 'date', nullable: true })
   fechaVencimiento?: string;
 
+  @Column({ name: 'id_bodega', type: 'uuid', nullable: true })
+  idBodega?: string;
+
+  @Column({ name: 'id_usuario', type: 'uuid', nullable: true })
+  idUsuario?: string;
+
+  @Column({ name: 'motivo_anulacion', type: 'text', nullable: true })
+  motivoAnulacion?: string;
+
   @OneToMany(() => DetalleFacturaCompra, (detalle) => detalle.facturaCompra, {
     cascade: true,
     eager: true,

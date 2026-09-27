@@ -3,41 +3,60 @@ import {
   IsNotEmpty,
   IsNumber,
   IsOptional,
+  IsPositive,
   IsString,
   IsUUID,
+  Min,
+  ValidateIf,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+export const TIPOS_MOVIMIENTO_MANUAL = [
+  'ENTRADA',
+  'SALIDA',
+  'AJUSTE_ENTRADA',
+  'AJUSTE_SALIDA',
+  'TRASLADO',
+] as const;
 
 export class RegistrarMovimientoDto {
   @ApiProperty({ example: 'a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d', description: 'UUID del producto' })
   @IsNotEmpty()
-  @IsUUID('4')
+  @IsUUID()
   idProducto: string;
 
-  @ApiProperty({ example: 'a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d', description: 'UUID de la bodega' })
+  @ApiProperty({ example: 'a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d', description: 'UUID de la bodega (origen en traslados)' })
   @IsNotEmpty()
-  @IsUUID('4')
+  @IsUUID()
   idBodega: string;
 
   @ApiProperty({
     example: 'ENTRADA',
-    enum: ['ENTRADA', 'SALIDA', 'AJUSTE_ENTRADA', 'AJUSTE_SALIDA', 'TRASLADO'],
+    enum: TIPOS_MOVIMIENTO_MANUAL,
+    description: 'TRASLADO genera una salida en idBodega y una entrada en idBodegaDestino',
   })
   @IsNotEmpty()
-  @IsIn(['ENTRADA', 'SALIDA', 'AJUSTE_ENTRADA', 'AJUSTE_SALIDA', 'TRASLADO'])
-  tipoMovimiento: string;
+  @IsIn(TIPOS_MOVIMIENTO_MANUAL)
+  tipoMovimiento: (typeof TIPOS_MOVIMIENTO_MANUAL)[number];
 
-  @ApiProperty({ example: 10, description: 'Cantidad de unidades' })
-  @IsNotEmpty()
+  @ApiPropertyOptional({ example: 'a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d', description: 'Obligatorio en TRASLADO' })
+  @ValidateIf((o) => o.tipoMovimiento === 'TRASLADO')
+  @IsNotEmpty({ message: 'idBodegaDestino es obligatorio en un traslado' })
+  @IsUUID()
+  idBodegaDestino?: string;
+
+  @ApiProperty({ example: 10, description: 'Cantidad de unidades (mayor que cero)' })
   @IsNumber()
+  @IsPositive({ message: 'La cantidad debe ser mayor que cero' })
   cantidad: number;
 
-  @ApiPropertyOptional({ example: 120000.00, description: 'Costo unitario de adquisición' })
+  @ApiPropertyOptional({ example: 120000.0, description: 'Costo unitario (solo entradas). Si no se envía se usa el costo promedio' })
   @IsOptional()
   @IsNumber()
+  @Min(0, { message: 'El costo unitario no puede ser negativo' })
   costoUnitario?: number;
 
-  @ApiPropertyOptional({ example: 'Ajuste inicial de inventario o factura compra' })
+  @ApiPropertyOptional({ example: 'Ajuste inicial de inventario' })
   @IsOptional()
   @IsString()
   motivo?: string;
@@ -46,17 +65,17 @@ export class RegistrarMovimientoDto {
 export class AjusteFisicoDto {
   @ApiProperty({ example: 'a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d' })
   @IsNotEmpty()
-  @IsUUID('4')
+  @IsUUID()
   idProducto: string;
 
   @ApiProperty({ example: 'a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d' })
   @IsNotEmpty()
-  @IsUUID('4')
+  @IsUUID()
   idBodega: string;
 
   @ApiProperty({ example: 25, description: 'Cantidad física real contada' })
-  @IsNotEmpty()
   @IsNumber()
+  @Min(0, { message: 'La cantidad física no puede ser negativa' })
   cantidadFisica: number;
 
   @ApiPropertyOptional({ example: 'Conteo semestral de inventario físico' })

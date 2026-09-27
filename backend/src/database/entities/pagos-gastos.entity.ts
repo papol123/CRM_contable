@@ -57,6 +57,15 @@ export class Pago {
 
   @Column({ name: 'monto', type: 'numeric', precision: 15, scale: 2 })
   monto: number;
+
+  @Column({ name: 'id_usuario', type: 'uuid', nullable: true })
+  idUsuario?: string;
+
+  @Column({ name: 'observaciones', type: 'text', nullable: true })
+  observaciones?: string;
+
+  @Column({ name: 'motivo_anulacion', type: 'text', nullable: true })
+  motivoAnulacion?: string;
 }
 
 @Entity({ name: 'aplicacion_pago_venta' })
@@ -135,4 +144,13 @@ export class Gasto {
 
   @Column({ name: 'soporte_url', type: 'text', nullable: true })
   soporteUrl?: string;
+
+  @Column({ name: 'id_usuario', type: 'uuid', nullable: true })
+  idUsuario?: string;
+
+  @Column({ name: 'anulado', default: false })
+  anulado: boolean;
+
+  @Column({ name: 'motivo_anulacion', type: 'text', nullable: true })
+  motivoAnulacion?: string;
 }

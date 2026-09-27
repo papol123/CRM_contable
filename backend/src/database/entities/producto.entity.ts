@@ -9,8 +9,9 @@ import {
 import { CategoriaProducto } from './categoria-producto.entity';
 import { UnidadMedida } from './unidad-medida.entity';
 import { Impuesto } from './impuesto.entity';
-import { PrecioProducto } from './precio-producto.entity';
+import { PrecioProducto } from './precio-proveedor.entity';
 import { MovimientoInventario } from './movimiento-inventario.entity';
+import { Marca } from './marca.entity';
 
 @Entity({ name: 'productos' })
 export class Producto {
@@ -52,6 +53,13 @@ export class Producto {
 
   @Column({ name: 'activo', default: true })
   activo: boolean;
+
+  @Column({ name: 'id_marca', type: 'uuid', nullable: true })
+  idMarca?: string;
+
+  @ManyToOne(() => Marca, { eager: true, nullable: true })
+  @JoinColumn({ name: 'id_marca' })
+  marca?: Marca;
 
   @OneToMany(() => PrecioProducto, (p) => p.producto)
   precios: PrecioProducto[];

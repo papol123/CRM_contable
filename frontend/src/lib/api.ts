@@ -83,20 +83,20 @@ export async function apiFetch<T>(
     return {} as T;
   }
 
-  if (response.status === 404) {
-    throw new ApiException(404, 'La ruta no existe todavía o su prefijo no es /api/v1');
-  }
-
-  if (response.status === 401) {
-    throw new ApiException(401, 'Email o contraseña incorrectos, o ese usuario no existe en la base');
-  }
-
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
+    // Se respeta el mensaje del backend (p. ej. "Usuario con ID X no encontrado");
+    // los textos genéricos solo se usan si la respuesta no trae mensaje
+    const mensajePorDefecto: Record<number, string> = {
+      401: 'Sesión expirada o credenciales inválidas',
+      404: 'La ruta no existe todavía o su prefijo no es /api/v1',
+    };
     const message = Array.isArray(data.message)
       ? data.message.join('. ')
-      : data.message || `Error HTTP ${response.status}: ${response.statusText}`;
+      : data.message ||
+        mensajePorDefecto[response.status] ||
+        `Error HTTP ${response.status}: ${response.statusText}`;
 
     throw new ApiException(response.status, message, data.error);
   }
@@ -164,34 +164,40 @@ export async function fetchUsers(search?: string, idRol?: string): Promise<UserI
   if (idRol && idRol.trim()) params.append('idRol', idRol.trim());
 
   const query = params.toString() ? `?${params.toString()}` : '';
-  return apiFetch<UserItem[]>(`/users${query}`);
+  return apiFetch<UserItem[]>(`/usuarios${query}`);
 }
 
 export async function fetchRoles(): Promise<RoleItem[]> {
-  return apiFetch<RoleItem[]>('/users/roles');
+  return apiFetch<RoleItem[]>('/roles');
 }
 
 export async function fetchUserById(id: string): Promise<UserItem> {
-  return apiFetch<UserItem>(`/users/${id}`);
+  return apiFetch<UserItem>(`/usuarios/${id}`);
 }
 
 export async function createUser(data: CreateUserInput): Promise<UserItem> {
-  return apiFetch<UserItem>('/users', {
+  return apiFetch<UserItem>('/usuarios', {
     method: 'POST',
     body: JSON.stringify(data),
   });
 }
 
 export async function updateUser(id: string, data: UpdateUserInput): Promise<UserItem> {
-  return apiFetch<UserItem>(`/users/${id}`, {
+  return apiFetch<UserItem>(`/usuarios/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(data),
   });
 }
 
-export async function deleteUser(id: string): Promise<{ message: string }> {
-  return apiFetch<{ message: string }>(`/users/${id}`, {
-    method: 'DELETE',
+export async function desactivarUser(id: string): Promise<{ message: string }> {
+  return apiFetch<{ message: string }>(`/usuarios/${id}/desactivar`, {
+    method: 'POST',
+  });
+}
+
+export async function activarUser(id: string): Promise<{ message: string }> {
+  return apiFetch<{ message: string }>(`/usuarios/${id}/activar`, {
+    method: 'POST',
   });
 }
 

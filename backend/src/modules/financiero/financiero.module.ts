@@ -12,19 +12,19 @@ import {
   AplicacionPagoCompra,
   Gasto,
 } from '../../database/entities/pagos-gastos.entity';
-import { FacturaVenta } from '../../database/entities/factura-venta.entity';
+import { CategoriaGasto } from '../../database/entities/categoria-gasto.entity';
 import { MovimientoInventario } from '../../database/entities/movimiento-inventario.entity';
-import { Bodega } from '../../database/entities/bodega.entity';
-import {
-  ComprasController,
-  CarteraController,
-} from './controllers/compras-cartera.controller';
+import { ComprasController, CarteraController } from './controllers/compras-cartera.controller';
 import {
   PagosController,
   GastosController,
   ReportesController,
 } from './controllers/pagos-gastos-reportes.controller';
-import { FinancieroService } from './financiero.service';
+import { ComprasService } from './compras.service';
+import { CarteraService } from './cartera.service';
+import { PagosService } from './pagos.service';
+import { GastosService } from './gastos.service';
+import { ReportesService } from './reportes.service';
 
 @Module({
   imports: [
@@ -37,9 +37,8 @@ import { FinancieroService } from './financiero.service';
       AplicacionPagoVenta,
       AplicacionPagoCompra,
       Gasto,
-      FacturaVenta,
+      CategoriaGasto,
       MovimientoInventario,
-      Bodega,
     ]),
   ],
   controllers: [
@@ -49,7 +48,7 @@ import { FinancieroService } from './financiero.service';
     GastosController,
     ReportesController,
   ],
-  providers: [FinancieroService],
-  exports: [FinancieroService],
+  providers: [ComprasService, CarteraService, PagosService, GastosService, ReportesService],
+  exports: [CarteraService],
 })
 export class FinancieroModule {}

@@ -58,7 +58,7 @@ export class AuthService {
     // Actualizar fecha de último login
     await this.usersService.updateLastLogin(user.id);
 
-    const permisos = user.rol?.permisos?.map((p) => p.codigo) || [];
+    const permisos = user.rol?.activo ? user.rol.permisos?.map((p) => p.codigo) || [] : [];
 
     const payload = {
       sub: user.id,
@@ -121,7 +121,7 @@ export class AuthService {
       throw new UnauthorizedException('Usuario inactivo');
     }
 
-    const permisos = user.rol?.permisos?.map((p) => p.codigo) || [];
+    const permisos = user.rol?.activo ? user.rol.permisos?.map((p) => p.codigo) || [] : [];
     const payload = {
       sub: user.id,
       email: user.email,

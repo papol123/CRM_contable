@@ -38,7 +38,7 @@ export class ProveedoresController {
   @RequirePermission('terceros.consultar')
   @ApiOperation({ summary: 'Comparar precio del producto entre proveedores' })
   @ApiQuery({ name: 'productoId', required: true })
-  async compararPrecios(@Query('productoId') productoId: string) {
+  async compararPrecios(@Query('productoId', ParseUUIDPipe) productoId: string) {
     return this.proveedoresService.compararPrecios(productoId);
   }
 
@@ -68,7 +68,7 @@ export class ProveedoresController {
   }
 
   @Delete(':id')
-  @RequirePermission('terceros.editar')
+  @RequirePermission('terceros.eliminar')
   @ApiOperation({ summary: 'Borrado lógico de proveedor (solo Administrador)' })
   async remove(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string) {
     return this.proveedoresService.remove(id);
