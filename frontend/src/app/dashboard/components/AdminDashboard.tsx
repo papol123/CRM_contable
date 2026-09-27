@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import styles from '../dashboard.module.css';
-import { UserItem, RoleItem, fetchUsers, fetchRoles, deleteUser } from '@/lib/api';
+import { UserItem, RoleItem, fetchUsers, fetchRoles, desactivarUser } from '@/lib/api';
 import UserModal from './UserModal';
 import UserDetailModal from './UserDetailModal';
 
@@ -91,7 +91,7 @@ export default function AdminDashboard() {
     if (!userToDelete) return;
     setIsDeleting(true);
     try {
-      const res = await deleteUser(userToDelete.id);
+      const res = await desactivarUser(userToDelete.id);
       handleSuccess(res.message || `Usuario ${userToDelete.email} desactivado correctamente.`);
       setUserToDelete(null);
     } catch (err: unknown) {
@@ -234,7 +234,7 @@ export default function AdminDashboard() {
               </svg>
               <div>
                 <h2 className={styles.cardTitle}>Directorio de Usuarios</h2>
-                <p className={styles.cardSubtitle}>Listado en tiempo real desde el backend (GET /users)</p>
+                <p className={styles.cardSubtitle}>Listado en tiempo real desde el backend (GET /usuarios)</p>
               </div>
             </div>
 
@@ -392,7 +392,7 @@ export default function AdminDashboard() {
                           </td>
                           <td>
                             <div className={styles.actionsGroup} style={{ justifyContent: 'flex-end' }}>
-                              {/* Ver detalle (GET /users/:id) */}
+                              {/* Ver detalle (GET /usuarios/:id) */}
                               <button
                                 type="button"
                                 className={styles.btnAction}
@@ -403,7 +403,7 @@ export default function AdminDashboard() {
                                 👁️
                               </button>
 
-                              {/* Editar (PATCH /users/:id) */}
+                              {/* Editar (PATCH /usuarios/:id) */}
                               <button
                                 type="button"
                                 className={styles.btnAction}
@@ -414,7 +414,7 @@ export default function AdminDashboard() {
                                 ✏️
                               </button>
 
-                              {/* Desactivar / Eliminar (DELETE /users/:id) */}
+                              {/* Desactivar (POST /usuarios/:id/desactivar) */}
                               {u.activo ? (
                                 <button
                                   type="button"
@@ -450,7 +450,7 @@ export default function AdminDashboard() {
         </section>
       )}
 
-      {/* VISTA 2: Catálogo de Roles y Permisos (GET /users/roles) */}
+      {/* VISTA 2: Catálogo de Roles y Permisos (GET /roles) */}
       {activeTab === 'roles' && (
         <section className={styles.card}>
           <div className={styles.cardHeader}>
@@ -534,7 +534,7 @@ export default function AdminDashboard() {
         </section>
       )}
 
-      {/* Modal de Creación / Edición (POST /users o PATCH /users/:id) */}
+      {/* Modal de Creación / Edición (POST /usuarios o PATCH /usuarios/:id) */}
       <UserModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
@@ -543,13 +543,13 @@ export default function AdminDashboard() {
         userToEdit={editingUser}
       />
 
-      {/* Modal de Detalle (GET /users/:id) */}
+      {/* Modal de Detalle (GET /usuarios/:id) */}
       <UserDetailModal
         userId={viewingUserId}
         onClose={() => setViewingUserId(null)}
       />
 
-      {/* Modal de Confirmación para Desactivar / Eliminar (DELETE /users/:id) */}
+      {/* Modal de Confirmación para Desactivar (POST /usuarios/:id/desactivar) */}
       {userToDelete && (
         <div className={styles.modalOverlay} onClick={() => setUserToDelete(null)}>
           <div className={styles.modalContent} onClick={(e) => e.stopPropagation()} style={{ maxWidth: '440px' }}>

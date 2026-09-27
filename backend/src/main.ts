@@ -3,6 +3,7 @@ import { ValidationPipe, Logger } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
+import { GlobalHttpExceptionFilter } from './common/filters/http-exception.filter';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -15,20 +16,23 @@ async function bootstrap() {
   app.use(cookieParser());
 
   // 3. Habilitación de CORS para el Frontend (Next.js)
+  // En producción solo se acepta FRONTEND_URL (puede ser una lista separada por comas).
+  // En desarrollo se aceptan además localhost y 127.0.0.1 en cualquier puerto.
+  const esProduccion = process.env.NODE_ENV === 'production';
+  const origenesPermitidos = (process.env.FRONTEND_URL || '')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+
   app.enableCors({
     origin: (origin, callback) => {
-      // Permitir solicitudes sin origin (como herramientas internas o curl)
+      // Solicitudes sin origin (curl, Bruno, servidor a servidor) no están sujetas a CORS
       if (!origin) return callback(null, true);
-      // Permitir localhost o 127.0.0.1 en cualquier puerto local o FRONTEND_URL
-      const isAllowed =
-        origin.startsWith('http://localhost:') ||
-        origin.startsWith('http://127.0.0.1:') ||
-        origin === process.env.FRONTEND_URL;
-      if (isAllowed) {
-        callback(null, true);
-      } else {
-        callback(null, true); // En desarrollo permitir para evitar bloqueos
-      }
+      const esLocal =
+        origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:');
+      const permitido = origenesPermitidos.includes(origin) || (!esProduccion && esLocal);
+      // Con false no se envían cabeceras CORS y el navegador bloquea la respuesta
+      callback(null, permitido);
     },
     credentials: true,
   });
@@ -42,11 +46,14 @@ async function bootstrap() {
     }),
   );
 
-  // 5. Documentación interactiva Swagger / OpenAPI
+  // 5. Filtro global de excepciones HTTP para respuestas estandarizadas
+  app.useGlobalFilters(new GlobalHttpExceptionFilter());
+
+  // 6. Documentación interactiva Swagger / OpenAPI
   const config = new DocumentBuilder()
-    .setTitle('CRM Contable API')
+    .setTitle('CRM Contable — Repuestos Automotrices API')
     .setDescription(
-      'API REST para CRM Contable de Repuestos Automotrices - Módulo de Autenticación y Autorización RBAC',
+      'Catálogo completo de servicios REST para CRM/ERP Contable: Autenticación RBAC, Usuarios, Catálogos, Terceros (Clientes y Proveedores), Productos e Inventario (Kardex), Ventas y Facturación DIAN, Compras, Pagos y Cartera.',
     )
     .setVersion('1.0')
     .addBearerAuth()

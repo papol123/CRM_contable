@@ -1,6 +1,6 @@
 const http = require('http');
 
-const API_BASE = 'http://localhost:3000/api/v1';
+const API_BASE = process.env.API_URL || 'http://localhost:3000/api/v1';
 
 async function request(path, options = {}) {
   const url = new URL(`${API_BASE}${path}`);
@@ -64,22 +64,22 @@ async function runTests() {
   console.log(`   Status: ${adminMeRes.status} | Nombre: ${adminMeRes.data.nombres} ${adminMeRes.data.apellidos}`);
   console.log(`   Permisos asignados: ${adminMeRes.data.permisos?.length} permisos`);
 
-  // ─── 3. GET /users/roles (ADMIN) ───────────────────────────────────────────
-  console.log('\n3️⃣ [GET /users/roles] Consultando catálogo de roles y permisos...');
-  const rolesRes = await request('/users/roles', { headers: adminHeaders });
+  // ─── 3. GET /roles (ADMIN) ───────────────────────────────────────────
+  console.log('\n3️⃣ [GET /roles] Consultando catálogo de roles y permisos...');
+  const rolesRes = await request('/roles', { headers: adminHeaders });
   console.log(`   Status: ${rolesRes.status} | Roles encontrados: ${rolesRes.data.length}`);
   const rolUsuario = rolesRes.data.find(r => r.codigo === 'USUARIO');
   console.log(`   ✅ Rol de referencia: ${rolUsuario?.nombre} (ID: ${rolUsuario?.id})`);
 
-  // ─── 4. GET /users (ADMIN) ─────────────────────────────────────────────────
-  console.log('\n4️⃣ [GET /users] Consultando lista de usuarios con búsqueda y filtros...');
-  const usersRes = await request('/users', { headers: adminHeaders });
+  // ─── 4. GET /usuarios (ADMIN) ─────────────────────────────────────────────────
+  console.log('\n4️⃣ [GET /usuarios] Consultando lista de usuarios con búsqueda y filtros...');
+  const usersRes = await request('/usuarios', { headers: adminHeaders });
   console.log(`   Status: ${usersRes.status} | Total usuarios en base de datos: ${usersRes.data.length}`);
 
-  // ─── 5. POST /users (ADMIN - CREAR REGISTRO) ───────────────────────────────
+  // ─── 5. POST /usuarios (ADMIN - CREAR REGISTRO) ───────────────────────────────
   const testEmail = `test.operador.${Date.now()}@crmcontable.com`;
-  console.log(`\n5️⃣ [POST /users] Creando nuevo usuario: ${testEmail}...`);
-  const createRes = await request('/users', {
+  console.log(`\n5️⃣ [POST /usuarios] Creando nuevo usuario: ${testEmail}...`);
+  const createRes = await request('/usuarios', {
     method: 'POST',
     headers: adminHeaders,
     body: {
@@ -99,14 +99,14 @@ async function runTests() {
   const createdUser = createRes.data;
   console.log(`   ✅ Usuario creado con éxito. UUID: ${createdUser.id} | Rol: ${createdUser.rol?.nombre}`);
 
-  // ─── 6. GET /users/:id (ADMIN - CONSULTAR DETALLE) ─────────────────────────
-  console.log(`\n6️⃣ [GET /users/:id] Consultando detalle del usuario recién creado (${createdUser.id})...`);
-  const detailRes = await request(`/users/${createdUser.id}`, { headers: adminHeaders });
+  // ─── 6. GET /usuarios/:id (ADMIN - CONSULTAR DETALLE) ─────────────────────────
+  console.log(`\n6️⃣ [GET /usuarios/:id] Consultando detalle del usuario recién creado (${createdUser.id})...`);
+  const detailRes = await request(`/usuarios/${createdUser.id}`, { headers: adminHeaders });
   console.log(`   Status: ${detailRes.status} | Usuario: ${detailRes.data.nombres} ${detailRes.data.apellidos}`);
 
-  // ─── 7. PATCH /users/:id (ADMIN - ACTUALIZAR) ──────────────────────────────
-  console.log(`\n7️⃣ [PATCH /users/:id] Actualizando teléfono y nombre del usuario...`);
-  const updateRes = await request(`/users/${createdUser.id}`, {
+  // ─── 7. PATCH /usuarios/:id (ADMIN - ACTUALIZAR) ──────────────────────────────
+  console.log(`\n7️⃣ [PATCH /usuarios/:id] Actualizando teléfono y nombre del usuario...`);
+  const updateRes = await request(`/usuarios/${createdUser.id}`, {
     method: 'PATCH',
     headers: adminHeaders,
     body: {
@@ -116,10 +116,10 @@ async function runTests() {
   });
   console.log(`   Status: ${updateRes.status} | Nuevo nombre: ${updateRes.data.nombres} | Teléfono: ${updateRes.data.telefono}`);
 
-  // ─── 8. DELETE /users/:id (ADMIN - ELIMINAR / DESACTIVAR) ──────────────────
-  console.log(`\n8️⃣ [DELETE /users/:id] Desactivando usuario creado (soft delete)...`);
-  const deleteRes = await request(`/users/${createdUser.id}`, {
-    method: 'DELETE',
+  // ─── 8. POST /usuarios/:id/desactivar (ADMIN - ELIMINAR / DESACTIVAR) ──────────────────
+  console.log(`\n8️⃣ [POST /usuarios/:id/desactivar] Desactivando usuario creado (soft delete)...`);
+  const deleteRes = await request(`/usuarios/${createdUser.id}/desactivar`, {
+    method: 'POST',
     headers: adminHeaders
   });
   console.log(`   Status: ${deleteRes.status} | Mensaje: ${deleteRes.data.message}`);
@@ -144,9 +144,9 @@ async function runTests() {
   console.log(`   Status: ${userMeRes.status} | Nombre: ${userMeRes.data.nombres} ${userMeRes.data.apellidos}`);
   console.log(`   Permisos operativos: ${userMeRes.data.permisos?.join(', ')}`);
 
-  // ─── 11. GET /users (USUARIO - PRUEBA DE BLOQUEO DE SEGURIDAD 403) ─────────
-  console.log('\n1️⃣1️⃣ [GET /users] Intentando consultar usuarios con rol Usuario (esperando 403 Forbidden)...');
-  const userForbiddenRes = await request('/users', { headers: userHeaders });
+  // ─── 11. GET /usuarios (USUARIO - PRUEBA DE BLOQUEO DE SEGURIDAD 403) ─────────
+  console.log('\n1️⃣1️⃣ [GET /usuarios] Intentando consultar usuarios con rol Usuario (esperando 403 Forbidden)...');
+  const userForbiddenRes = await request('/usuarios', { headers: userHeaders });
   console.log(`   Status recibido: ${userForbiddenRes.status}`);
   if (userForbiddenRes.status === 403) {
     console.log(`   ✅ CORRECTO: Acceso denegado como corresponde por RBAC.`);

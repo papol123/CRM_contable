@@ -45,7 +45,15 @@ export async function apiFetch<T>(
     credentials: 'include',
   };
 
-  let response = await fetch(`${API_URL}${endpoint}`, config);
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${endpoint}`, config);
+  } catch {
+    throw new ApiException(
+      0,
+      'El backend no está corriendo. En la carpeta del backend ejecuta npm run start:dev',
+    );
+  }
 
   // Intento de refresco de token si expira (401)
   if (response.status === 401 && !endpoint.includes('/auth/login') && !endpoint.includes('/auth/refresh')) {
@@ -53,10 +61,17 @@ export async function apiFetch<T>(
       const refreshed = await refreshRequest();
       if (refreshed?.accessToken) {
         headers.set('Authorization', `Bearer ${refreshed.accessToken}`);
-        response = await fetch(`${API_URL}${endpoint}`, {
-          ...config,
-          headers,
-        });
+        try {
+          response = await fetch(`${API_URL}${endpoint}`, {
+            ...config,
+            headers,
+          });
+        } catch {
+          throw new ApiException(
+            0,
+            'El backend no está corriendo. En la carpeta del backend ejecuta npm run start:dev',
+          );
+        }
       }
     } catch {
       removeToken();
@@ -71,9 +86,17 @@ export async function apiFetch<T>(
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
+    // Se respeta el mensaje del backend (p. ej. "Usuario con ID X no encontrado");
+    // los textos genéricos solo se usan si la respuesta no trae mensaje
+    const mensajePorDefecto: Record<number, string> = {
+      401: 'Sesión expirada o credenciales inválidas',
+      404: 'La ruta no existe todavía o su prefijo no es /api/v1',
+    };
     const message = Array.isArray(data.message)
       ? data.message.join('. ')
-      : data.message || `Error HTTP ${response.status}: ${response.statusText}`;
+      : data.message ||
+        mensajePorDefecto[response.status] ||
+        `Error HTTP ${response.status}: ${response.statusText}`;
 
     throw new ApiException(response.status, message, data.error);
   }
@@ -141,34 +164,34 @@ export async function fetchUsers(search?: string, idRol?: string): Promise<UserI
   if (idRol && idRol.trim()) params.append('idRol', idRol.trim());
 
   const query = params.toString() ? `?${params.toString()}` : '';
-  return apiFetch<UserItem[]>(`/users${query}`);
+  return apiFetch<UserItem[]>(`/usuarios${query}`);
 }
 
 export async function fetchRoles(): Promise<RoleItem[]> {
-  return apiFetch<RoleItem[]>('/users/roles');
+  return apiFetch<RoleItem[]>('/roles');
 }
 
 export async function fetchUserById(id: string): Promise<UserItem> {
-  return apiFetch<UserItem>(`/users/${id}`);
+  return apiFetch<UserItem>(`/usuarios/${id}`);
 }
 
 export async function createUser(data: CreateUserInput): Promise<UserItem> {
-  return apiFetch<UserItem>('/users', {
+  return apiFetch<UserItem>('/usuarios', {
     method: 'POST',
     body: JSON.stringify(data),
   });
 }
 
 export async function updateUser(id: string, data: UpdateUserInput): Promise<UserItem> {
-  return apiFetch<UserItem>(`/users/${id}`, {
+  return apiFetch<UserItem>(`/usuarios/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(data),
   });
 }
 
-export async function deleteUser(id: string): Promise<{ message: string }> {
-  return apiFetch<{ message: string }>(`/users/${id}`, {
-    method: 'DELETE',
+export async function desactivarUser(id: string): Promise<{ message: string }> {
+  return apiFetch<{ message: string }>(`/usuarios/${id}/desactivar`, {
+    method: 'POST',
   });
 }
 
@@ -278,3 +301,108 @@ export async function requestInspect<T = unknown>(
   }
 }
 
+export async function activarUser(id: string): Promise<{ message: string }> {
+  return apiFetch<{ message: string }>(`/usuarios/${id}/activar`, {
+    method: 'POST',
+  });
+}
+
+// ─── Catálogos Base ──────────────────────────────────────────────────────────
+
+export async function fetchPaises(): Promise<any[]> {
+  return apiFetch<any[]>('/paises');
+}
+
+export async function fetchCiudades(departamentoId?: string, search?: string): Promise<any[]> {
+  const p = new URLSearchParams();
+  if (departamentoId) p.append('departamentoId', departamentoId);
+  if (search) p.append('search', search);
+  return apiFetch<any[]>(`/ciudades?${p.toString()}`);
+}
+
+export async function fetchCategorias(): Promise<any[]> {
+  return apiFetch<any[]>('/categorias');
+}
+
+export async function fetchBodegas(): Promise<any[]> {
+  return apiFetch<any[]>('/bodegas');
+}
+
+export async function fetchImpuestos(): Promise<any[]> {
+  return apiFetch<any[]>('/impuestos');
+}
+
+export async function fetchMetodosPago(): Promise<any[]> {
+  return apiFetch<any[]>('/medios-pago');
+}
+
+// ─── Clientes y Proveedores ──────────────────────────────────────────────────
+
+export async function fetchClientes(search?: string): Promise<any[]> {
+  const q = search ? `?search=${encodeURIComponent(search)}` : '';
+  return apiFetch<any[]>(`/clientes${q}`);
+}
+
+export async function fetchClienteById(id: string): Promise<any> {
+  return apiFetch<any>(`/clientes/${id}`);
+}
+
+export async function createCliente(data: any): Promise<any> {
+  return apiFetch<any>('/clientes', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function fetchProveedores(search?: string): Promise<any[]> {
+  const q = search ? `?search=${encodeURIComponent(search)}` : '';
+  return apiFetch<any[]>(`/proveedores${q}`);
+}
+
+// ─── Productos e Inventario ──────────────────────────────────────────────────
+
+export async function fetchProductos(search?: string, categoriaId?: string): Promise<any[]> {
+  const p = new URLSearchParams();
+  if (search) p.append('search', search);
+  if (categoriaId) p.append('categoriaId', categoriaId);
+  return apiFetch<any[]>(`/productos?${p.toString()}`);
+}
+
+export async function buscarProductos(q: string): Promise<any[]> {
+  return apiFetch<any[]>(`/productos/buscar?q=${encodeURIComponent(q)}`);
+}
+
+export async function fetchInventarioSaldos(bodegaId?: string): Promise<any[]> {
+  const q = bodegaId ? `?bodegaId=${bodegaId}` : '';
+  return apiFetch<any[]>(`/inventario${q}`);
+}
+
+export async function fetchAlertasStock(): Promise<any[]> {
+  return apiFetch<any[]>('/inventario/alertas-stock');
+}
+
+// ─── Ventas y Facturación ────────────────────────────────────────────────────
+
+export async function fetchFacturasVenta(search?: string): Promise<any[]> {
+  const q = search ? `?search=${encodeURIComponent(search)}` : '';
+  return apiFetch<any[]>(`/facturas-venta${q}`);
+}
+
+export async function createFacturaVenta(data: any): Promise<any> {
+  return apiFetch<any>('/facturas-venta', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function calcularFactura(data: any): Promise<any> {
+  return apiFetch<any>('/facturas-venta/calcular', { method: 'POST', body: JSON.stringify(data) });
+}
+
+// ─── Financiero y Dashboard ──────────────────────────────────────────────────
+
+export async function fetchCuentasPorCobrar(): Promise<any[]> {
+  return apiFetch<any[]>('/cuentas-por-cobrar');
+}
+
+export async function fetchCuentasPorPagar(): Promise<any[]> {
+  return apiFetch<any[]>('/cuentas-por-pagar');
+}
+
+export async function fetchDashboardResumen(): Promise<any> {
+  return apiFetch<any>('/dashboard/resumen');
+}

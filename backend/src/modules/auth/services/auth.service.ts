@@ -29,16 +29,20 @@ export class AuthService {
     const user = await this.usersService.findByEmail(email);
 
     if (!user) {
-      throw new UnauthorizedException('Credenciales inválidas');
+      throw new UnauthorizedException(
+        'Email o contraseña incorrectos, o ese usuario no existe en la base',
+      );
     }
 
     if (!user.activo) {
-      throw new UnauthorizedException('El usuario se encuentra inactivo');
+      throw new UnauthorizedException('El usuario se encuentra inactivo en el sistema');
     }
 
     const isMatch = await bcrypt.compare(pass, user.passwordHash);
     if (!isMatch) {
-      throw new UnauthorizedException('Credenciales inválidas');
+      throw new UnauthorizedException(
+        'Email o contraseña incorrectos, o ese usuario no existe en la base',
+      );
     }
 
     return user;
@@ -54,7 +58,7 @@ export class AuthService {
     // Actualizar fecha de último login
     await this.usersService.updateLastLogin(user.id);
 
-    const permisos = user.rol?.permisos?.map((p) => p.codigo) || [];
+    const permisos = user.rol?.activo ? user.rol.permisos?.map((p) => p.codigo) || [] : [];
 
     const payload = {
       sub: user.id,
@@ -117,7 +121,7 @@ export class AuthService {
       throw new UnauthorizedException('Usuario inactivo');
     }
 
-    const permisos = user.rol?.permisos?.map((p) => p.codigo) || [];
+    const permisos = user.rol?.activo ? user.rol.permisos?.map((p) => p.codigo) || [] : [];
     const payload = {
       sub: user.id,
       email: user.email,

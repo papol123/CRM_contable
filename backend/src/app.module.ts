@@ -1,12 +1,17 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { User } from './database/entities/user.entity';
-import { Role } from './database/entities/role.entity';
-import { Permission } from './database/entities/permission.entity';
-import { RefreshToken } from './database/entities/refresh-token.entity';
+
+// Módulos del sistema CRM Contable
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
+import { HealthModule } from './modules/health/health.module';
+import { CatalogosModule } from './modules/catalogos/catalogos.module';
+import { TercerosModule } from './modules/terceros/terceros.module';
+import { InventarioModule } from './modules/inventario/inventario.module';
+import { VentasModule } from './modules/ventas/ventas.module';
+import { FinancieroModule } from './modules/financiero/financiero.module';
+import { FacturacionElectronicaModule } from './modules/facturacion-electronica/facturacion-electronica.module';
 
 @Module({
   imports: [
@@ -24,14 +29,25 @@ import { UsersModule } from './modules/users/users.module';
         username: configService.get<string>('DB_USER', 'postgres'),
         password: configService.get<string>('DB_PASSWORD', 'postgres'),
         database: configService.get<string>('DB_NAME', 'crm_contable'),
-        ssl: configService.get<string>('DB_SSL') === 'true' ? { rejectUnauthorized: false } : false,
-        entities: [User, Role, Permission, RefreshToken],
-        synchronize: false, // Usar migraciones / script SQL en producción
+        ssl:
+          configService.get<string>('DB_SSL') === 'true'
+            ? { rejectUnauthorized: false }
+            : false,
+        // Cada módulo registra sus entidades con TypeOrmModule.forFeature
+        autoLoadEntities: true,
+        synchronize: false,
         logging: configService.get<string>('NODE_ENV') === 'development',
       }),
     }),
-    UsersModule,
+    HealthModule,
     AuthModule,
+    UsersModule,
+    CatalogosModule,
+    TercerosModule,
+    InventarioModule,
+    VentasModule,
+    FinancieroModule,
+    FacturacionElectronicaModule,
   ],
 })
 export class AppModule {}

@@ -20,7 +20,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: configService.get<string>('JWT_SECRET', 'secret_key_crm_contable'),
+      secretOrKey: configService.getOrThrow<string>('JWT_SECRET'),
     });
   }
 
@@ -30,7 +30,8 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       throw new UnauthorizedException('Usuario inactivo o no autorizado');
     }
 
-    const permisos = user.rol?.permisos?.map((p) => p.codigo) || [];
+    // Un rol desactivado deja al usuario sin permisos efectivos
+    const permisos = user.rol?.activo ? user.rol.permisos?.map((p) => p.codigo) || [] : [];
 
     return {
       id: user.id,
