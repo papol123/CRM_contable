@@ -29,16 +29,20 @@ export class AuthService {
     const user = await this.usersService.findByEmail(email);
 
     if (!user) {
-      throw new UnauthorizedException('Credenciales inválidas');
+      throw new UnauthorizedException(
+        'Email o contraseña incorrectos, o ese usuario no existe en la base',
+      );
     }
 
     if (!user.activo) {
-      throw new UnauthorizedException('El usuario se encuentra inactivo');
+      throw new UnauthorizedException('El usuario se encuentra inactivo en el sistema');
     }
 
     const isMatch = await bcrypt.compare(pass, user.passwordHash);
     if (!isMatch) {
-      throw new UnauthorizedException('Credenciales inválidas');
+      throw new UnauthorizedException(
+        'Email o contraseña incorrectos, o ese usuario no existe en la base',
+      );
     }
 
     return user;

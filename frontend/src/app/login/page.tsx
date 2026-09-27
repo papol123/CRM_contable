@@ -64,6 +64,14 @@ function AlertIcon() {
   );
 }
 
+function CheckIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: '2px' }}>
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  );
+}
+
 // ─── Validation ───────────────────────────────────────────────────────────────
 
 function validateEmail(email: string): string {
@@ -89,6 +97,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState({ email: '', password: '' });
   const [apiError, setApiError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   function validate(): boolean {
@@ -100,16 +109,19 @@ export default function LoginPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setApiError('');
+    setSuccessMessage('');
     if (!validate()) return;
 
     setIsLoading(true);
     try {
       await login({ email: email.trim(), password });
-      router.replace('/dashboard');
+      setSuccessMessage('Todo bien: el token queda guardado y ya puedes probar el resto de carpetas');
+      setTimeout(() => {
+        router.replace('/dashboard');
+      }, 1200);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Error al iniciar sesión. Inténtalo de nuevo.';
       setApiError(message);
-    } finally {
       setIsLoading(false);
     }
   }
@@ -132,6 +144,14 @@ export default function LoginPage() {
         </header>
 
         <form className={styles.form} onSubmit={handleSubmit} noValidate>
+          {/* Success Banner */}
+          {successMessage && (
+            <div className={styles.alertSuccess} role="status">
+              <CheckIcon />
+              <span>{successMessage}</span>
+            </div>
+          )}
+
           {/* API Error */}
           {apiError && (
             <div className={styles.alertError} role="alert">

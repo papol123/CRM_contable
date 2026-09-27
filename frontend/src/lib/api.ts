@@ -45,7 +45,15 @@ export async function apiFetch<T>(
     credentials: 'include',
   };
 
-  let response = await fetch(`${API_URL}${endpoint}`, config);
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${endpoint}`, config);
+  } catch {
+    throw new ApiException(
+      0,
+      'El backend no está corriendo. En la carpeta del backend ejecuta npm run start:dev',
+    );
+  }
 
   // Intento de refresco de token si expira (401)
   if (response.status === 401 && !endpoint.includes('/auth/login') && !endpoint.includes('/auth/refresh')) {
@@ -53,10 +61,17 @@ export async function apiFetch<T>(
       const refreshed = await refreshRequest();
       if (refreshed?.accessToken) {
         headers.set('Authorization', `Bearer ${refreshed.accessToken}`);
-        response = await fetch(`${API_URL}${endpoint}`, {
-          ...config,
-          headers,
-        });
+        try {
+          response = await fetch(`${API_URL}${endpoint}`, {
+            ...config,
+            headers,
+          });
+        } catch {
+          throw new ApiException(
+            0,
+            'El backend no está corriendo. En la carpeta del backend ejecuta npm run start:dev',
+          );
+        }
       }
     } catch {
       removeToken();
@@ -66,6 +81,14 @@ export async function apiFetch<T>(
   // Manejo de respuesta vacía (ej. 204 No Content)
   if (response.status === 204) {
     return {} as T;
+  }
+
+  if (response.status === 404) {
+    throw new ApiException(404, 'La ruta no existe todavía o su prefijo no es /api/v1');
+  }
+
+  if (response.status === 401) {
+    throw new ApiException(401, 'Email o contraseña incorrectos, o ese usuario no existe en la base');
   }
 
   const data = await response.json().catch(() => ({}));
@@ -170,4 +193,104 @@ export async function deleteUser(id: string): Promise<{ message: string }> {
   return apiFetch<{ message: string }>(`/users/${id}`, {
     method: 'DELETE',
   });
+}
+
+// ─── Catálogos Base ──────────────────────────────────────────────────────────
+
+export async function fetchPaises(): Promise<any[]> {
+  return apiFetch<any[]>('/paises');
+}
+
+export async function fetchCiudades(departamentoId?: string, search?: string): Promise<any[]> {
+  const p = new URLSearchParams();
+  if (departamentoId) p.append('departamentoId', departamentoId);
+  if (search) p.append('search', search);
+  return apiFetch<any[]>(`/ciudades?${p.toString()}`);
+}
+
+export async function fetchCategorias(): Promise<any[]> {
+  return apiFetch<any[]>('/categorias');
+}
+
+export async function fetchBodegas(): Promise<any[]> {
+  return apiFetch<any[]>('/bodegas');
+}
+
+export async function fetchImpuestos(): Promise<any[]> {
+  return apiFetch<any[]>('/impuestos');
+}
+
+export async function fetchMetodosPago(): Promise<any[]> {
+  return apiFetch<any[]>('/medios-pago');
+}
+
+// ─── Clientes y Proveedores ──────────────────────────────────────────────────
+
+export async function fetchClientes(search?: string): Promise<any[]> {
+  const q = search ? `?search=${encodeURIComponent(search)}` : '';
+  return apiFetch<any[]>(`/clientes${q}`);
+}
+
+export async function fetchClienteById(id: string): Promise<any> {
+  return apiFetch<any>(`/clientes/${id}`);
+}
+
+export async function createCliente(data: any): Promise<any> {
+  return apiFetch<any>('/clientes', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function fetchProveedores(search?: string): Promise<any[]> {
+  const q = search ? `?search=${encodeURIComponent(search)}` : '';
+  return apiFetch<any[]>(`/proveedores${q}`);
+}
+
+// ─── Productos e Inventario ──────────────────────────────────────────────────
+
+export async function fetchProductos(search?: string, categoriaId?: string): Promise<any[]> {
+  const p = new URLSearchParams();
+  if (search) p.append('search', search);
+  if (categoriaId) p.append('categoriaId', categoriaId);
+  return apiFetch<any[]>(`/productos?${p.toString()}`);
+}
+
+export async function buscarProductos(q: string): Promise<any[]> {
+  return apiFetch<any[]>(`/productos/buscar?q=${encodeURIComponent(q)}`);
+}
+
+export async function fetchInventarioSaldos(bodegaId?: string): Promise<any[]> {
+  const q = bodegaId ? `?bodegaId=${bodegaId}` : '';
+  return apiFetch<any[]>(`/inventario${q}`);
+}
+
+export async function fetchAlertasStock(): Promise<any[]> {
+  return apiFetch<any[]>('/inventario/alertas-stock');
+}
+
+// ─── Ventas y Facturación ────────────────────────────────────────────────────
+
+export async function fetchFacturasVenta(search?: string): Promise<any[]> {
+  const q = search ? `?search=${encodeURIComponent(search)}` : '';
+  return apiFetch<any[]>(`/facturas-venta${q}`);
+}
+
+export async function createFacturaVenta(data: any): Promise<any> {
+  return apiFetch<any>('/facturas-venta', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function calcularFactura(data: any): Promise<any> {
+  return apiFetch<any>('/facturas-venta/calcular', { method: 'POST', body: JSON.stringify(data) });
+}
+
+// ─── Financiero y Dashboard ──────────────────────────────────────────────────
+
+export async function fetchCuentasPorCobrar(): Promise<any[]> {
+  return apiFetch<any[]>('/cuentas-por-cobrar');
+}
+
+export async function fetchCuentasPorPagar(): Promise<any[]> {
+  return apiFetch<any[]>('/cuentas-por-pagar');
+}
+
+export async function fetchDashboardResumen(): Promise<any> {
+  return apiFetch<any>('/dashboard/resumen');
 }

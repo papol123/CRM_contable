@@ -49,16 +49,30 @@ export function isAuthenticated(): boolean {
 // ─── API calls ───────────────────────────────────────────────────────────────
 
 export async function loginRequest(credentials: LoginCredentials): Promise<AuthResponse> {
-  const res = await fetch(`${API_URL}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include', // needed for HttpOnly refresh-token cookie
-    body: JSON.stringify(credentials),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include', // needed for HttpOnly refresh-token cookie
+      body: JSON.stringify(credentials),
+    });
+  } catch {
+    throw new Error('El backend no está corriendo. En la carpeta del backend ejecuta npm run start:dev');
+  }
+
+  if (res.status === 401) {
+    throw new Error('Email o contraseña incorrectos, o ese usuario no existe en la base');
+  }
+
+  if (res.status === 404) {
+    throw new Error('La ruta no existe todavía o su prefijo no es /api/v1');
+  }
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    throw new Error(error.message || 'Credenciales inválidas');
+    const message = Array.isArray(error.message) ? error.message.join('. ') : error.message;
+    throw new Error(message || `Error del servidor (${res.status})`);
   }
 
   return res.json();
@@ -66,22 +80,33 @@ export async function loginRequest(credentials: LoginCredentials): Promise<AuthR
 
 export async function logoutRequest(): Promise<void> {
   const token = getToken();
-  await fetch(`${API_URL}/auth/logout`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    credentials: 'include',
-  });
-  removeToken();
+  try {
+    await fetch(`${API_URL}/auth/logout`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      credentials: 'include',
+    });
+  } catch {
+    // Silently ignore network failure on logout
+  } finally {
+    removeToken();
+  }
 }
 
 export async function refreshRequest(): Promise<AuthResponse> {
-  const res = await fetch(`${API_URL}/auth/refresh`, {
-    method: 'POST',
-    credentials: 'include',
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}/auth/refresh`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+  } catch {
+    removeToken();
+    throw new Error('El backend no está corriendo. En la carpeta del backend ejecuta npm run start:dev');
+  }
 
   if (!res.ok) {
     removeToken();
@@ -93,11 +118,22 @@ export async function refreshRequest(): Promise<AuthResponse> {
 
 export async function getMeRequest(): Promise<AuthUser> {
   const token = getToken();
-  const res = await fetch(`${API_URL}/auth/me`, {
-    headers: { Authorization: `Bearer ${token}` },
-    credentials: 'include',
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+      credentials: 'include',
+    });
+  } catch {
+    throw new Error('El backend no está corriendo. En la carpeta del backend ejecuta npm run start:dev');
+  }
 
+  if (res.status === 401) {
+    throw new Error('Email o contraseña incorrectos, o ese usuario no existe en la base');
+  }
+  if (res.status === 404) {
+    throw new Error('La ruta no existe todavía o su prefijo no es /api/v1');
+  }
   if (!res.ok) throw new Error('No autenticado');
   return res.json();
 }
