@@ -1,6 +1,8 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { HttpLoggerMiddleware, RouteParamsInterceptor } from './common/middleware/http-logger.middleware';
 
 // Módulos del sistema CRM Contable
 import { AuthModule } from './modules/auth/auth.module';
@@ -49,5 +51,15 @@ import { FacturacionElectronicaModule } from './modules/facturacion-electronica/
     FinancieroModule,
     FacturacionElectronicaModule,
   ],
+  providers: [
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: RouteParamsInterceptor,
+    },
+  ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(HttpLoggerMiddleware).forRoutes('*');
+  }
+}
