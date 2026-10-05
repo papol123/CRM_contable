@@ -839,6 +839,299 @@
   display: inline-block;
 }
 
+/* ─── Admin Sidebar Layout ───────────────────────────────────────────────── */
+.adminLayout {
+  display: flex;
+  gap: 0;
+  min-height: calc(100vh - 72px);
+}
+
+.sidebar {
+  width: 280px;
+  min-width: 280px;
+  background: rgba(19, 21, 42, 0.92);
+  border-right: 1px solid var(--color-border);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 72px;
+  height: calc(100vh - 72px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  z-index: 40;
+  transition: transform 280ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sidebarHeader {
+  padding: 1.5rem 1.25rem 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.sidebarHeaderTitle {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.sidebarNav {
+  flex: 1;
+  padding: 0.75rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.sidebarSectionLabel {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(148, 163, 184, 0.6);
+  font-weight: 700;
+  padding: 1rem 0.75rem 0.4rem;
+  margin-top: 0.25rem;
+}
+
+.sidebarItem {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 180ms ease;
+  border: 1px solid transparent;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #94a3b8;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+}
+
+.sidebarItem:hover {
+  background: rgba(99, 102, 241, 0.08);
+  color: #c7d2fe;
+  border-color: rgba(99, 102, 241, 0.12);
+}
+
+.sidebarItemActive {
+  background: rgba(99, 102, 241, 0.15);
+  color: #a5b4fc;
+  border-color: rgba(99, 102, 241, 0.3);
+  font-weight: 600;
+  box-shadow: 0 0 20px rgba(99, 102, 241, 0.08);
+}
+
+.sidebarItemIcon {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 1.1rem;
+  background: rgba(255, 255, 255, 0.03);
+  transition: background 180ms ease;
+}
+
+.sidebarItemActive .sidebarItemIcon {
+  background: rgba(99, 102, 241, 0.2);
+}
+
+.sidebarItemLabel {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebarItemBadge {
+  font-size: 0.7rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 6px;
+  font-weight: 700;
+  background: rgba(99, 102, 241, 0.15);
+  color: #818cf8;
+  min-width: 22px;
+  text-align: center;
+}
+
+.sidebarItemBadgePending {
+  background: rgba(251, 146, 60, 0.12);
+  color: #fb923c;
+  font-size: 0.6rem;
+}
+
+.sidebarFooter {
+  padding: 1rem 1.25rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.sidebarFooterDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 8px rgba(52, 211, 153, 0.5);
+  flex-shrink: 0;
+}
+
+.sidebarFooterText {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+/* Admin Content Area (right side of sidebar) */
+.adminContent {
+  flex: 1;
+  min-width: 0;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+  max-width: 1100px;
+}
+
+/* ─── Breadcrumb ─────────────────────────────────────────────────────────── */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  margin-bottom: -0.5rem;
+}
+
+.breadcrumbActive {
+  color: #a5b4fc;
+  font-weight: 600;
+}
+
+/* ─── Module Placeholder Cards ───────────────────────────────────────────── */
+.modulePlaceholder {
+  background: rgba(19, 21, 42, 0.55);
+  border: 1px dashed rgba(99, 102, 241, 0.2);
+  border-radius: var(--radius-lg);
+  padding: 3rem 2rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.modulePlaceholderIcon {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.15);
+}
+
+.modulePlaceholderTitle {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #f1f5f9;
+}
+
+.modulePlaceholderDesc {
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+  max-width: 500px;
+  line-height: 1.6;
+}
+
+.modulePlaceholderPermissions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+  margin-top: 0.5rem;
+}
+
+.modulePlaceholderBadge {
+  font-size: 0.7rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  font-weight: 600;
+  background: rgba(251, 146, 60, 0.1);
+  color: #fb923c;
+  border: 1px solid rgba(251, 146, 60, 0.2);
+}
+
+/* ─── System Info Grid ───────────────────────────────────────────────────── */
+.systemInfoGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.systemInfoItem {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.systemInfoIcon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.systemInfoTitle {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #f1f5f9;
+  margin-bottom: 0.25rem;
+}
+
+.systemInfoValue {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+/* ─── Mobile sidebar toggle ──────────────────────────────────────────────── */
+.sidebarToggle {
+  display: none;
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 60;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  color: white;
+  border: none;
+  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.5);
+  font-size: 1.25rem;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
 /* ─── Responsive Media Queries ───────────────────────────────────────────── */
 @media (max-width: 768px) {
   .navbar {
@@ -855,5 +1148,29 @@
     grid-template-columns: 1fr;
     text-align: center;
     justify-items: center;
+  }
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: 72px;
+    transform: translateX(-100%);
+    z-index: 55;
+    box-shadow: 4px 0 30px rgba(0, 0, 0, 0.5);
+  }
+  .sidebarOpen {
+    transform: translateX(0);
+  }
+  .sidebarToggle {
+    display: flex;
+  }
+  .adminContent {
+    padding: 1.25rem;
+  }
+  .sidebarOverlay {
+    position: fixed;
+    inset: 0;
+    top: 72px;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 50;
   }
 }
