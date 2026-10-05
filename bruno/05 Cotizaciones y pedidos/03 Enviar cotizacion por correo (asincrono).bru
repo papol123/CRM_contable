@@ -1,0 +1,35 @@
+meta {
+  name: Enviar cotizacion por correo (asincrono)
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/cotizaciones/{{idCotizacion}}/enviar
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+body:json {
+  {
+    "email": "cliente.prueba@example.com"
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 202) bru.setEnvVar("idJobCotizacion", res.getBody().jobId);
+}
+
+tests {
+  test("responde 202 o 422", function () {
+    expect([202, 422]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  202 si el correo está configurado (o CORREO_MODO=log fuera de producción). 422 si falta configurar /configuracion/correo y SMTP_PASSWORD.
+}

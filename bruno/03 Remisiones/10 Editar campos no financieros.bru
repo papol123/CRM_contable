@@ -1,0 +1,27 @@
+meta {
+  name: Editar campos no financieros
+  type: http
+  seq: 10
+}
+
+patch {
+  url: {{baseUrl}}/facturas-venta/{{idRemision}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+body:json {
+  {
+    "observaciones": "Entregar en mostrador"
+  }
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

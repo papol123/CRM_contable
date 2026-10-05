@@ -1,0 +1,32 @@
+meta {
+  name: Anular dos veces - 409
+  type: http
+  seq: 14
+}
+
+post {
+  url: {{baseUrl}}/facturas-venta/{{idRemision}}/anular
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+body:json {
+  {
+    "motivo": "Prueba de anulación desde Bruno"
+  }
+}
+
+tests {
+  test("responde 409", function () {
+    expect(res.getStatus()).to.equal(409);
+  });
+  test("error en formato RFC 9457 (application/problem+json)", function () {
+    expect(res.getHeader("content-type")).to.contain("application/problem+json");
+    expect(res.getBody()).to.have.property("type");
+    expect(res.getBody()).to.have.property("instance");
+  });
+}

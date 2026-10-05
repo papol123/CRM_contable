@@ -1,0 +1,24 @@
+meta {
+  name: Comprobante de egreso PDF
+  type: http
+  seq: 11
+}
+
+get {
+  url: {{baseUrl}}/pagos/{{idPago}}/recibo
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("devuelve un PDF", function () {
+    expect(res.getHeader("content-type")).to.contain("application/pdf");
+  });
+}

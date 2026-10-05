@@ -1,0 +1,33 @@
+meta {
+  name: Registrar gasto propio
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/gastos
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+body:json {
+  {
+    "idCategoriaGasto": "{{idCategoriaGasto}}",
+    "descripcion": "Gasolina moto mensajero (Bruno)",
+    "monto": 45000
+  }
+}
+
+script:post-response {
+  bru.setEnvVar("idGasto", res.getBody().id);
+}
+
+tests {
+  test("responde 201", function () {
+    expect(res.getStatus()).to.equal(201);
+  });
+}

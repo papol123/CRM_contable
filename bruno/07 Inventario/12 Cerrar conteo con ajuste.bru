@@ -1,0 +1,33 @@
+meta {
+  name: Cerrar conteo con ajuste
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{baseUrl}}/inventario/conteos/{{idConteo}}/cerrar
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+body:json {
+  {
+    "motivo": "Conteo de prueba Bruno",
+    "conteosFisicos": [
+      {
+        "idProducto": "{{idProductoConteo}}",
+        "stockFisico": {{fisicoConteo}}
+      }
+    ]
+  }
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

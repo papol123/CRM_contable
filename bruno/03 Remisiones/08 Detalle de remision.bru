@@ -1,0 +1,21 @@
+meta {
+  name: Detalle de remision
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/facturas-venta/{{idRemision}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

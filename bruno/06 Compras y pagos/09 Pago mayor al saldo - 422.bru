@@ -1,0 +1,35 @@
+meta {
+  name: Pago mayor al saldo - 422
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/pagos
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+body:json {
+  {
+    "tipoPago": "factura de compra",
+    "idFactura": "{{idCompra}}",
+    "idMetodoPago": "{{idMetodoPago}}",
+    "monto": 999999999
+  }
+}
+
+tests {
+  test("responde 422", function () {
+    expect(res.getStatus()).to.equal(422);
+  });
+  test("error en formato RFC 9457 (application/problem+json)", function () {
+    expect(res.getHeader("content-type")).to.contain("application/problem+json");
+    expect(res.getBody()).to.have.property("type");
+    expect(res.getBody()).to.have.property("instance");
+  });
+}

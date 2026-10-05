@@ -1,0 +1,25 @@
+meta {
+  name: Medios de pago
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/medios-pago
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+script:post-response {
+  bru.setEnvVar("idMetodoPago", res.getBody()[0].id);
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

@@ -1,0 +1,21 @@
+meta {
+  name: Inventario valorizado (Usuario - 403)
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/inventario/valorizado
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+tests {
+  test("responde 403", function () {
+    expect(res.getStatus()).to.equal(403);
+  });
+}

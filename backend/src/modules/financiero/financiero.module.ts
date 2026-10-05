@@ -25,6 +25,7 @@ import { CarteraService } from './cartera.service';
 import { PagosService } from './pagos.service';
 import { GastosService } from './gastos.service';
 import { ReportesService } from './reportes.service';
+import { InventarioModule } from '../inventario/inventario.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { ReportesService } from './reportes.service';
       CategoriaGasto,
       MovimientoInventario,
     ]),
+    InventarioModule,
   ],
   controllers: [
     ComprasController,

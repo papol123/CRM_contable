@@ -1,0 +1,21 @@
+meta {
+  name: Uso de almacenamiento
+  type: http
+  seq: 13
+}
+
+get {
+  url: {{baseUrl}}/admin/almacenamiento
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

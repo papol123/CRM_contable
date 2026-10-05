@@ -1,0 +1,69 @@
+meta {
+  name: Registrar compra con descuento y retenciones (idempotente)
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/facturas-compra
+  body: json
+  auth: bearer
+}
+
+headers {
+  Idempotency-Key: {{claveIdem}}
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+body:json {
+  {
+    "idProveedor": "{{idProveedor}}",
+    "numeroFactura": "{{numeroCompra}}",
+    "fechaEmision": "{{hoy}}",
+    "idBodega": "{{idBodega}}",
+    "pctRetefuente": 2.5,
+    "pctReteIva": 15,
+    "tarifaReteIcaPorMil": 9.66,
+    "items": [
+      {
+        "idProducto": "{{idProducto}}",
+        "cantidad": 10,
+        "costoUnitario": 10000,
+        "pctDescuento": 10,
+        "pctIva": 19
+      }
+    ]
+  }
+}
+
+script:pre-request {
+  // Fecha de hoy en Colombia (en UTC, después de las 7 p. m. ya sería mañana)
+  // Colombia es UTC-5 todo el año (sin horario de verano)
+  bru.setEnvVar("hoy", new Date(Date.now() - 5 * 3600 * 1000).toISOString().slice(0, 10));
+  bru.setEnvVar("claveIdem", "bruno-" + Date.now() + "-" + Math.random().toString(16).slice(2));
+  bru.setEnvVar("numeroCompra", "BRU-" + Date.now());
+}
+
+script:post-response {
+  bru.setEnvVar("idCompra", res.getBody().id);
+  bru.setEnvVar("totalCompra", res.getBody().total);
+}
+
+tests {
+  test("responde 201", function () {
+    expect(res.getStatus()).to.equal(201);
+  });
+  test("base, IVA, ReteFuente, ReteIVA, ReteICA y total", function () {
+    const c = res.getBody();
+    expect(c.base).to.equal(90000);
+    expect(c.totalIva).to.equal(17100);
+    expect(c.retefuente).to.equal(2250);
+    expect(c.reteiva).to.equal(2565);
+    expect(c.reteica).to.equal(869.4);
+    expect(c.total).to.equal(101415.6);
+    expect(c.saldo).to.equal(101415.6);
+  });
+}

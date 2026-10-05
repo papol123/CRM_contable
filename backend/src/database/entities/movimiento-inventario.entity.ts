@@ -37,7 +37,7 @@ export class MovimientoInventario {
   @Column({ name: 'costo_unitario', type: 'numeric', precision: 15, scale: 2, nullable: true })
   costoUnitario?: number;
 
-  @CreateDateColumn({ name: 'fecha' })
+  @CreateDateColumn({ name: 'fecha', type: 'timestamptz' })
   fecha: Date;
 
   @Column({ name: 'origen_tabla', length: 50, nullable: true })
@@ -45,4 +45,11 @@ export class MovimientoInventario {
 
   @Column({ name: 'origen_id', type: 'uuid', nullable: true })
   origenId?: string;
+
+  /** Quién registró el movimiento y por qué (obligatorio en ajustes) */
+  @Column({ name: 'id_usuario', type: 'uuid', nullable: true })
+  idUsuario?: string;
+
+  @Column({ name: 'motivo', type: 'text', nullable: true })
+  motivo?: string;
 }

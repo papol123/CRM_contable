@@ -1,0 +1,24 @@
+meta {
+  name: PDF de cotizacion
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/cotizaciones/{{idCotizacion}}/pdf
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("devuelve un PDF", function () {
+    expect(res.getHeader("content-type")).to.contain("application/pdf");
+  });
+}

@@ -61,6 +61,16 @@ export class FacturaCompra {
   @Column({ name: 'motivo_anulacion', type: 'text', nullable: true })
   motivoAnulacion?: string;
 
+  /** Retenciones practicadas al proveedor (valores en pesos calculados al registrar) */
+  @Column({ name: 'retefuente', type: 'numeric', precision: 15, scale: 2, default: 0 })
+  retefuente: number;
+
+  @Column({ name: 'reteiva', type: 'numeric', precision: 15, scale: 2, default: 0 })
+  reteiva: number;
+
+  @Column({ name: 'reteica', type: 'numeric', precision: 15, scale: 2, default: 0 })
+  reteica: number;
+
   @OneToMany(() => DetalleFacturaCompra, (detalle) => detalle.facturaCompra, {
     cascade: true,
     eager: true,
@@ -95,4 +105,7 @@ export class DetalleFacturaCompra {
 
   @Column({ name: 'pct_iva', type: 'numeric', precision: 5, scale: 2, default: 0 })
   pctIva: number;
+
+  @Column({ name: 'pct_descuento', type: 'numeric', precision: 5, scale: 2, default: 0 })
+  pctDescuento: number;
 }

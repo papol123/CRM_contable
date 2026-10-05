@@ -1,0 +1,25 @@
+meta {
+  name: Reactivar al otro administrador
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/usuarios/{{idGerencia}}/activar
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}
+
+docs {
+  Deja gerencia@crmcontable.com activo otra vez.
+}

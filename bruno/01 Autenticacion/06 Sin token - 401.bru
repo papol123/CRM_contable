@@ -1,0 +1,22 @@
+meta {
+  name: Sin token - 401
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/clientes
+  body: none
+  auth: none
+}
+
+tests {
+  test("responde 401", function () {
+    expect(res.getStatus()).to.equal(401);
+  });
+  test("error en formato RFC 9457 (application/problem+json)", function () {
+    expect(res.getHeader("content-type")).to.contain("application/problem+json");
+    expect(res.getBody()).to.have.property("type");
+    expect(res.getBody()).to.have.property("instance");
+  });
+}

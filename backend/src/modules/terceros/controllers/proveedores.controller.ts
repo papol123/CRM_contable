@@ -7,31 +7,28 @@ import {
   Body,
   Param,
   Query,
-  UseGuards,
   HttpCode,
   HttpStatus,
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { ProveedoresService } from '../proveedores.service';
-import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
-import { PermissionsGuard } from '../../auth/guards/permissions.guard';
 import { RequirePermission } from '../../auth/decorators/permissions.decorator';
+import { Actor } from '../../auth/decorators/actor.decorator';
 import { CreateProveedorDto, UpdateProveedorDto } from '../dto/proveedor-datos.dto';
+import { ConsultaTercerosDto, HistorialComprasDto } from '../dto/cliente.dto';
 
 @ApiTags('Proveedores')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('proveedores')
 export class ProveedoresController {
   constructor(private readonly proveedoresService: ProveedoresService) {}
 
   @Get()
   @RequirePermission('terceros.consultar')
-  @ApiOperation({ summary: 'Listar proveedores' })
-  @ApiQuery({ name: 'search', required: false })
-  async findAll(@Query('search') search?: string) {
-    return this.proveedoresService.findAll(search);
+  @ApiOperation({ summary: 'Listar proveedores (paginado; busca por documento o razón social)' })
+  async findAll(@Query() filtros: ConsultaTercerosDto) {
+    return this.proveedoresService.findAll(filtros);
   }
 
   @Get('comparar-precios')
@@ -53,8 +50,9 @@ export class ProveedoresController {
   @HttpCode(HttpStatus.CREATED)
   @RequirePermission('terceros.crear')
   @ApiOperation({ summary: 'Crear proveedor' })
-  async create(@Body() dto: CreateProveedorDto) {
-    return this.proveedoresService.create(dto);
+  @ApiResponse({ status: 409, description: 'Ya existe un tercero con ese documento' })
+  async create(@Body() dto: CreateProveedorDto, @Actor() actor: Actor) {
+    return this.proveedoresService.create(dto, actor);
   }
 
   @Patch(':id')
@@ -63,22 +61,27 @@ export class ProveedoresController {
   async update(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
     @Body() dto: UpdateProveedorDto,
+    @Actor() actor: Actor,
   ) {
-    return this.proveedoresService.update(id, dto);
+    return this.proveedoresService.update(id, dto, actor);
   }
 
   @Delete(':id')
   @RequirePermission('terceros.eliminar')
-  @ApiOperation({ summary: 'Borrado lógico de proveedor (solo Administrador)' })
-  async remove(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string) {
-    return this.proveedoresService.remove(id);
+  @ApiOperation({ summary: 'Borrado lógico (bloqueado si hay cuentas por pagar)' })
+  @ApiResponse({ status: 409, description: 'Tiene cuentas por pagar o ya está inactivo' })
+  async remove(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string, @Actor() actor: Actor) {
+    return this.proveedoresService.remove(id, actor);
   }
 
   @Get(':id/historial-compras')
   @RequirePermission('compras.consultar')
   @ApiOperation({ summary: 'Consultar compras realizadas al proveedor' })
-  async findHistorialCompras(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string) {
-    return this.proveedoresService.findHistorialCompras(id);
+  async findHistorialCompras(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Query() filtros: HistorialComprasDto,
+  ) {
+    return this.proveedoresService.findHistorialCompras(id, filtros);
   }
 
   @Get(':id/productos')

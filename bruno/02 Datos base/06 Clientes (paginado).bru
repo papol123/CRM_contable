@@ -1,0 +1,32 @@
+meta {
+  name: Clientes (paginado)
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/clientes?limit=50
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+script:post-response {
+  const c = res.getBody().data.find((x) => x.tercero.activo);
+  bru.setEnvVar("idCliente", c.id);
+  bru.setEnvVar("documentoCliente", c.tercero.numeroDocumento);
+  bru.setEnvVar("idTipoDocCliente", c.tercero.idTipoDocumento);
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("respuesta paginada", function () {
+    expect(res.getBody()).to.have.property("meta");
+    expect(res.getBody().meta.total).to.be.above(0);
+  });
+}

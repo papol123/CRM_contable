@@ -1,0 +1,36 @@
+meta {
+  name: Leer XML de factura electronica del proveedor
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/facturas-compra/importar-xml
+  body: multipartForm
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+body:multipart-form {
+  archivo: @file(archivos/factura-proveedor.xml)
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("identifica proveedor por NIT y producto por código", function () {
+    const p = res.getBody().precarga;
+    expect(p.idProveedor).to.be.a("string");
+    expect(p.items[0].idProducto).to.be.a("string");
+    expect(p.items[0].pctDescuento).to.equal(10);
+    expect(p.items[0].pctIva).to.equal(19);
+  });
+}
+
+docs {
+  XML UBL con el NIT de un proveedor y el código de un producto reales de la base. No guarda nada: devuelve la precarga para POST /facturas-compra.
+}

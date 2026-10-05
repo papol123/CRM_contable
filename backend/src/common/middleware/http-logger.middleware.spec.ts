@@ -1,4 +1,5 @@
 import { HttpLoggerMiddleware, sanitizeData, RouteParamsInterceptor } from './http-logger.middleware';
+import { MetricasService } from '../metricas/metricas.service';
 import { Logger } from '@nestjs/common';
 
 describe('HttpLoggerMiddleware & Sanitization', () => {
@@ -85,7 +86,7 @@ describe('HttpLoggerMiddleware & Sanitization', () => {
     let loggerErrorSpy: jest.SpyInstance;
 
     beforeEach(() => {
-      middleware = new HttpLoggerMiddleware();
+      middleware = new HttpLoggerMiddleware(new MetricasService());
       loggerLogSpy = jest.spyOn((middleware as any).logger, 'log').mockImplementation();
       loggerWarnSpy = jest.spyOn((middleware as any).logger, 'warn').mockImplementation();
       loggerErrorSpy = jest.spyOn((middleware as any).logger, 'error').mockImplementation();

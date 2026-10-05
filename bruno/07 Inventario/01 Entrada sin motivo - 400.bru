@@ -1,0 +1,29 @@
+meta {
+  name: Entrada sin motivo - 400
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/inventario/entradas
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+body:json {
+  {
+    "idProducto": "{{idProducto}}",
+    "idBodega": "{{idBodega}}",
+    "cantidad": 2
+  }
+}
+
+tests {
+  test("responde 400", function () {
+    expect(res.getStatus()).to.equal(400);
+  });
+}

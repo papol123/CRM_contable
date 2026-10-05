@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
@@ -9,8 +10,12 @@ import { Proveedor } from '../../database/entities/proveedor.entity';
 import { Tercero } from '../../database/entities/tercero.entity';
 import { Telefono, Email } from '../../database/entities/contacto-datos.entity';
 import { CreateProveedorDto, UpdateProveedorDto } from './dto/proveedor-datos.dto';
-import { SQL_PAGADO_FACTURA_COMPRA, SQL_TOTAL_FACTURA_COMPRA } from '../../common/documentos/saldos';
+import { consultarSaldosCompra, SQL_PAGADO_FACTURA_COMPRA, SQL_TOTAL_FACTURA_COMPRA } from '../../common/documentos/saldos';
 import { redondear } from '../../common/documentos/totales';
+import { normalizarPaginacion, paginado } from '../../common/paginacion/paginacion';
+import { AuditoriaService } from '../auditoria/auditoria.service';
+import { Actor } from '../auth/decorators/actor.decorator';
+import { ConsultaTercerosDto, HistorialComprasDto } from './dto/cliente.dto';
 
 @Injectable()
 export class ProveedoresService {
@@ -20,9 +25,11 @@ export class ProveedoresService {
     private readonly proveedorRepository: Repository<Proveedor>,
     @InjectRepository(Tercero)
     private readonly terceroRepository: Repository<Tercero>,
+    private readonly auditoria: AuditoriaService,
   ) {}
 
-  async findAll(search?: string): Promise<Proveedor[]> {
+  async findAll(filtros: ConsultaTercerosDto = {}) {
+    const pagina = normalizarPaginacion(filtros);
     const query = this.proveedorRepository
       .createQueryBuilder('p')
       .innerJoinAndSelect('p.tercero', 't')
@@ -30,16 +37,19 @@ export class ProveedoresService {
       .leftJoinAndSelect('t.ciudad', 'cd')
       .leftJoinAndSelect('t.telefonos', 'tel')
       .leftJoinAndSelect('t.emails', 'em')
-      .orderBy('t.razonSocial', 'ASC');
+      .orderBy('t.razonSocial', 'ASC')
+      .skip(pagina.offset)
+      .take(pagina.limit);
 
-    if (search && search.trim() !== '') {
-      query.andWhere(
-        '(LOWER(t.razonSocial) LIKE :search OR LOWER(t.numeroDocumento) LIKE :search)',
-        { search: `%${search.trim().toLowerCase()}%` },
-      );
+    if (filtros.search?.trim()) {
+      query.andWhere('(LOWER(t.razonSocial) LIKE :search OR LOWER(t.numeroDocumento) LIKE :search)', {
+        search: `%${filtros.search.trim().toLowerCase()}%`,
+      });
     }
+    if (filtros.ciudadId) query.andWhere('t.idCiudad = :ciudadId', { ciudadId: filtros.ciudadId });
 
-    return query.getMany();
+    const [data, total] = await query.getManyAndCount();
+    return paginado(data, total, pagina);
   }
 
   async findById(id: string): Promise<Proveedor> {
@@ -59,7 +69,7 @@ export class ProveedoresService {
     return proveedor;
   }
 
-  async create(dto: CreateProveedorDto): Promise<Proveedor> {
+  async create(dto: CreateProveedorDto, actor: Actor): Promise<Proveedor> {
     const existing = await this.terceroRepository.findOne({
       where: { numeroDocumento: dto.numeroDocumento.trim() },
     });
@@ -93,7 +103,7 @@ export class ProveedoresService {
       if (dto.email) {
         await manager.save(Email, {
           idTercero: tercero.id,
-          email: dto.email,
+          email: dto.email.toLowerCase(),
           tipo: 'VENTAS',
           principal: true,
         });
@@ -103,14 +113,32 @@ export class ProveedoresService {
         Proveedor,
         manager.create(Proveedor, { idTercero: tercero.id, diasPlazo: dto.diasPlazo || 0 }),
       );
+      await this.auditoria.registrar(
+        {
+          idUsuario: actor.id,
+          accion: 'CREAR',
+          recurso: 'proveedores',
+          idRecurso: proveedor.id,
+          valorNuevo: dto,
+          ip: actor.ip,
+          userAgent: actor.userAgent,
+        },
+        manager,
+      );
       return proveedor.id;
     });
 
     return this.findById(idProveedor);
   }
 
-  async update(id: string, dto: UpdateProveedorDto): Promise<Proveedor> {
+  async update(id: string, dto: UpdateProveedorDto, actor: Actor): Promise<Proveedor> {
     const proveedor = await this.findById(id);
+    if (dto.activo !== undefined && dto.activo !== proveedor.tercero.activo) {
+      if (!actor.permisos.includes('terceros.eliminar')) {
+        throw new ForbiddenException('Activar o desactivar proveedores requiere el permiso terceros.eliminar');
+      }
+      if (!dto.activo) await this.validarPuedeDesactivar(proveedor);
+    }
 
     if (dto.razonSocial || dto.idCiudad !== undefined || dto.activo !== undefined) {
       await this.terceroRepository.update(proveedor.tercero.id, {
@@ -119,22 +147,71 @@ export class ProveedoresService {
         ...(dto.activo !== undefined ? { activo: dto.activo } : {}),
       });
     }
-
     if (dto.diasPlazo !== undefined) {
       await this.proveedorRepository.update(id, { diasPlazo: dto.diasPlazo });
     }
 
+    await this.auditoria.registrar({
+      idUsuario: actor.id,
+      accion: 'ACTUALIZAR',
+      recurso: 'proveedores',
+      idRecurso: id,
+      valorAnterior: {
+        razonSocial: proveedor.tercero.razonSocial,
+        idCiudad: proveedor.tercero.idCiudad,
+        diasPlazo: proveedor.diasPlazo,
+        activo: proveedor.tercero.activo,
+      },
+      valorNuevo: dto,
+      ip: actor.ip,
+      userAgent: actor.userAgent,
+    });
     return this.findById(id);
   }
 
-  async remove(id: string): Promise<{ message: string }> {
+  /** Borrado lógico: se impide si quedan cuentas por pagar al proveedor. */
+  async remove(id: string, actor: Actor): Promise<{ message: string }> {
     const proveedor = await this.findById(id);
+    if (!proveedor.tercero.activo) throw new ConflictException('El proveedor ya está inactivo');
+    await this.validarPuedeDesactivar(proveedor);
     await this.terceroRepository.update(proveedor.tercero.id, { activo: false });
-    return { message: 'Proveedor desactivado exitosamente (borrado lógico)' };
+    await this.auditoria.registrar({
+      idUsuario: actor.id,
+      accion: 'ELIMINAR',
+      recurso: 'proveedores',
+      idRecurso: id,
+      valorAnterior: { activo: true, documento: proveedor.tercero.numeroDocumento },
+      valorNuevo: { activo: false },
+      ip: actor.ip,
+      userAgent: actor.userAgent,
+    });
+    return { message: 'Proveedor desactivado (borrado lógico)' };
   }
 
-  async findHistorialCompras(id: string) {
+  private async validarPuedeDesactivar(proveedor: Proveedor) {
+    const pendientes = await consultarSaldosCompra(this.dataSource.manager, {
+      idContraparte: proveedor.id,
+      soloConSaldo: true,
+    });
+    if (pendientes.length) {
+      const total = redondear(pendientes.reduce((acc, p) => acc + p.saldo, 0));
+      throw new ConflictException(`El proveedor tiene ${pendientes.length} cuenta(s) por pagar por ${total}`);
+    }
+  }
+
+  async findHistorialCompras(id: string, filtros: HistorialComprasDto = {}) {
     const proveedor = await this.findById(id);
+    const pagina = normalizarPaginacion(filtros);
+    const params: any[] = [id];
+    const condiciones = ['fc.id_proveedor = $1'];
+    if (filtros.desde) {
+      params.push(filtros.desde.slice(0, 10));
+      condiciones.push(`fc.fecha_emision >= $${params.length}`);
+    }
+    if (filtros.hasta) {
+      params.push(filtros.hasta.slice(0, 10));
+      condiciones.push(`fc.fecha_emision <= $${params.length}`);
+    }
     const filas = await this.dataSource.query(
       `SELECT fc.id_factura_compra AS "idFacturaCompra", fc.numero_factura AS "numeroFactura",
               to_char(fc.fecha_emision, 'YYYY-MM-DD') AS "fechaEmision",
@@ -144,9 +221,9 @@ export class ProveedoresService {
               ${SQL_PAGADO_FACTURA_COMPRA('fc')} AS pagado
          FROM facturas_compra fc
          JOIN estados_factura_compra e ON e.id_estado = fc.id_estado
-        WHERE fc.id_proveedor = $1
+        WHERE ${condiciones.join(' AND ')}
         ORDER BY fc.fecha_emision DESC`,
-      [id],
+      params,
     );
     const compras = filas.map((f: any) => ({
       ...f,
@@ -162,7 +239,7 @@ export class ProveedoresService {
       totalCompras: vigentes.length,
       montoTotal: redondear(vigentes.reduce((acc: number, c: any) => acc + c.monto, 0)),
       saldoPendiente: redondear(vigentes.reduce((acc: number, c: any) => acc + c.saldo, 0)),
-      compras,
+      ...paginado(compras.slice(pagina.offset, pagina.offset + pagina.limit), compras.length, pagina),
     };
   }
 

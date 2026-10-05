@@ -1,0 +1,21 @@
+meta {
+  name: Otro Usuario ve el gasto ajeno - 404
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/gastos/{{idGasto}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenVendedor}}
+}
+
+tests {
+  test("responde 404", function () {
+    expect(res.getStatus()).to.equal(404);
+  });
+}

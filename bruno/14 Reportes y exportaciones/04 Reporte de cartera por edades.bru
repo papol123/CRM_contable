@@ -1,0 +1,24 @@
+meta {
+  name: Reporte de cartera por edades
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/reportes/cartera
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("totales por tramo", function () {
+    expect(res.getBody().totales).to.have.property("mas90");
+  });
+}

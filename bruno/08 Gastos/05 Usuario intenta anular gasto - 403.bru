@@ -1,0 +1,27 @@
+meta {
+  name: Usuario intenta anular gasto - 403
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/gastos/{{idGasto}}/anular
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+body:json {
+  {
+    "motivo": "Error de digitación"
+  }
+}
+
+tests {
+  test("responde 403", function () {
+    expect(res.getStatus()).to.equal(403);
+  });
+}

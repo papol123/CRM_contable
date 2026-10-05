@@ -5,7 +5,6 @@ import {
   ConflictException,
   UnprocessableEntityException,
   InternalServerErrorException,
-  NotImplementedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
@@ -16,10 +15,15 @@ import {
   AplicacionPagoCompra,
 } from '../../database/entities/pagos-gastos.entity';
 import { MetodoPago } from '../../database/entities/metodo-pago.entity';
-import { CreatePagoDto } from './dto/pagos-gastos.dto';
+import { ConsultaPagosDto, CreatePagoDto } from './dto/pagos-gastos.dto';
 import { consultarSaldosCompra, consultarSaldosVenta } from '../../common/documentos/saldos';
 import { redondear } from '../../common/documentos/totales';
 import { fechaHoy } from '../../common/utils/fechas';
+import { validarPeriodoAbierto } from '../../common/periodos/periodo-contable';
+import { normalizarPaginacion, paginado } from '../../common/paginacion/paginacion';
+import { PdfService } from '../../common/pdf/pdf.service';
+import { AuditoriaService } from '../auditoria/auditoria.service';
+import { Actor } from '../auth/decorators/actor.decorator';
 
 @Injectable()
 export class PagosService {
@@ -27,14 +31,27 @@ export class PagosService {
     private readonly dataSource: DataSource,
     @InjectRepository(Pago)
     private readonly pagoRepository: Repository<Pago>,
+    private readonly pdf: PdfService,
+    private readonly auditoria: AuditoriaService,
   ) {}
 
-  async findAll(tipoPago?: string): Promise<Pago[]> {
-    return this.pagoRepository.find({
-      where: tipoPago ? { tipoPago: tipoPago as Pago['tipoPago'] } : {},
-      relations: ['tercero', 'metodoPago', 'estado'],
-      order: { fechaPago: 'DESC' },
-    });
+  async findAll(filtros: ConsultaPagosDto = {}) {
+    const pagina = normalizarPaginacion(filtros);
+    const query = this.pagoRepository
+      .createQueryBuilder('p')
+      .leftJoinAndSelect('p.tercero', 't')
+      .leftJoinAndSelect('p.metodoPago', 'm')
+      .leftJoinAndSelect('p.estado', 'e')
+      .orderBy('p.fechaPago', 'DESC')
+      .skip(pagina.offset)
+      .take(pagina.limit);
+    if (filtros.tipoPago) query.andWhere('p.tipoPago = :tipo', { tipo: filtros.tipoPago });
+    if (filtros.idTercero) query.andWhere('p.idTercero = :idTercero', { idTercero: filtros.idTercero });
+    if (filtros.desde) query.andWhere('p.fechaPago >= :desde', { desde: filtros.desde.slice(0, 10) });
+    if (filtros.hasta) query.andWhere('p.fechaPago <= :hasta', { hasta: filtros.hasta.slice(0, 10) });
+
+    const [data, total] = await query.getManyAndCount();
+    return paginado(data, total, pagina);
   }
 
   async findById(id: string): Promise<any> {
@@ -64,8 +81,11 @@ export class PagosService {
    * Registra un pago o abono. Si trae factura, el monto no puede superar su
    * saldo (A6) y, si la deja en cero, la factura pasa a PAGADA.
    */
-  async create(dto: CreatePagoDto, idUsuario?: string): Promise<any> {
+  async create(dto: CreatePagoDto, actor?: Actor): Promise<any> {
+    const idUsuario = actor?.id;
+    const fechaPago = dto.fechaPago?.slice(0, 10) || fechaHoy();
     const id = await this.dataSource.transaction(async (manager) => {
+      await validarPeriodoAbierto(manager, fechaPago, 'registrar el pago');
       // Serializa pagos para que dos abonos simultáneos no superen el saldo
       await manager.query(`SELECT pg_advisory_xact_lock(hashtext('crm_pagos'))`);
 
@@ -93,9 +113,10 @@ export class PagosService {
           throw new ConflictException('La factura no tiene saldo pendiente');
         }
         if (monto > factura.saldo) {
-          throw new UnprocessableEntityException(
-            `El pago (${monto}) supera el saldo pendiente de la factura (${factura.saldo})`,
-          );
+          throw new UnprocessableEntityException({
+            message: `El pago (${monto}) supera el saldo pendiente del documento (${factura.saldo})`,
+            tipo: 'pago-supera-saldo',
+          });
         }
         saldoRestante = redondear(factura.saldo - monto);
       }
@@ -112,7 +133,7 @@ export class PagosService {
           idEstado: estadoAplicado.id,
           tipoPago: dto.tipoPago,
           monto,
-          fechaPago: dto.fechaPago?.slice(0, 10) || fechaHoy(),
+          fechaPago,
           idUsuario,
           observaciones: dto.observaciones,
         }),
@@ -135,18 +156,31 @@ export class PagosService {
           if (saldoRestante === 0) await this.cambiarEstadoFactura(manager, 'compra', dto.idFactura, 'PAGADA');
         }
       }
+      await this.auditoria.registrar(
+        {
+          idUsuario,
+          accion: 'CREAR',
+          recurso: 'pagos',
+          idRecurso: pago.id,
+          valorNuevo: { ...dto, monto, saldoRestante },
+          ip: actor?.ip,
+          userAgent: actor?.userAgent,
+        },
+        manager,
+      );
       return pago.id;
     });
     return this.findById(id);
   }
 
   /** A5: anula el pago y reabre el saldo de las facturas a las que se aplicó. */
-  async anular(id: string, motivo: string) {
+  async anular(id: string, motivo: string, actor?: Actor) {
     return this.dataSource.transaction(async (manager) => {
       await manager.query(`SELECT pg_advisory_xact_lock(hashtext('crm_pagos'))`);
       const pago = await manager.findOne(Pago, { where: { id } });
       if (!pago) throw new NotFoundException(`Pago con ID ${id} no encontrado`);
       if (pago.estado?.codigo === 'ANULADO') throw new ConflictException('El pago ya se encuentra anulado');
+      await validarPeriodoAbierto(manager, pago.fechaPago, 'reversar el pago');
 
       const estadoAnulado = await this.estado(manager, 'ANULADO');
       await manager.update(Pago, id, { idEstado: estadoAnulado.id, motivoAnulacion: motivo });
@@ -155,6 +189,21 @@ export class PagosService {
       for (const a of ventas) await this.cambiarEstadoFactura(manager, 'venta', a.idFacturaVenta, 'EMITIDA');
       const compras = await manager.find(AplicacionPagoCompra, { where: { idPago: id } });
       for (const a of compras) await this.cambiarEstadoFactura(manager, 'compra', a.idFacturaCompra, 'RECIBIDA');
+
+      await this.auditoria.registrar(
+        {
+          idUsuario: actor?.id,
+          accion: 'ANULAR',
+          recurso: 'pagos',
+          idRecurso: id,
+          valorAnterior: { estado: pago.estado?.codigo, monto: Number(pago.monto) },
+          valorNuevo: { estado: 'ANULADO', documentosReabiertos: ventas.length + compras.length },
+          motivo,
+          ip: actor?.ip,
+          userAgent: actor?.userAgent,
+        },
+        manager,
+      );
 
       return {
         id,
@@ -165,11 +214,37 @@ export class PagosService {
     });
   }
 
-  async getRecibo(id: string): Promise<never> {
-    await this.findById(id);
-    throw new NotImplementedException(
-      'La generación del recibo en PDF aún no está implementada. Use GET /pagos/{id} para obtener los datos',
-    );
+  /** Recibo de caja (pagos de clientes) o comprobante de egreso (pagos a proveedores). */
+  async getRecibo(id: string): Promise<{ contenido: Buffer; nombre: string }> {
+    const pago = await this.findById(id);
+    const esVenta = pago.tipoPago === 'factura de venta';
+    const titulo = esVenta ? 'Recibo de caja' : 'Comprobante de egreso';
+    const numero = `${esVenta ? 'RC' : 'CE'}-${String(pago.id).slice(0, 8).toUpperCase()}`;
+    const contenido = await this.pdf.documento({
+      titulo,
+      numero,
+      campos: [
+        ['Fecha', String(pago.fechaPago).slice(0, 10)],
+        ['Medio de pago', pago.metodoPago?.nombre ?? ''],
+        ['Estado', pago.estado?.codigo === 'ANULADO' ? `ANULADO — ${pago.motivoAnulacion ?? ''}` : pago.estado?.codigo ?? ''],
+      ],
+      tercero: {
+        etiqueta: esVenta ? 'Recibido de' : 'Pagado a',
+        nombre: pago.tercero?.razonSocial ?? '',
+        documento: pago.tercero?.numeroDocumento,
+      },
+      tabla: pago.aplicaciones.length
+        ? {
+            columnas: ['Documento', 'Valor aplicado'],
+            anchos: [315, 200],
+            alineacion: ['left', 'right'],
+            filas: pago.aplicaciones.map((a: any) => [a.numero ?? a.idFactura, a.montoAplicado.toLocaleString('es-CO', { style: 'currency', currency: 'COP' })]),
+          }
+        : undefined,
+      totales: [['Total', Number(pago.monto)]],
+      notas: [pago.observaciones].filter(Boolean),
+    });
+    return { contenido, nombre: `${numero}.pdf` };
   }
 
   private async resolverTercero(manager: EntityManager, dto: CreatePagoDto, esVenta: boolean) {

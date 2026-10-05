@@ -1,47 +1,60 @@
-import { ApiProperty } from '@nestjs/swagger';
-import {
-  IsEmail,
-  IsOptional,
-  IsString,
-  IsUUID,
-  MinLength,
-  IsBoolean,
-} from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsEmail, IsNotEmpty, IsOptional, IsString, IsUUID, IsBoolean, MaxLength } from 'class-validator';
+import { ContrasenaSegura } from '../../../common/validacion/contrasena';
+import { PaginacionDto } from '../../../common/paginacion/paginacion';
 
 export class UpdateUserDto {
-  @ApiProperty({ example: 'juan.perez@crmcontable.com', required: false })
+  @ApiPropertyOptional({ example: 'juan.perez@crmcontable.com' })
   @IsOptional()
   @IsEmail({}, { message: 'El correo electrónico no es válido' })
+  @MaxLength(150)
   email?: string;
 
-  @ApiProperty({ example: 'NuevaContraseña123*', required: false })
+  @ApiPropertyOptional({ example: 'NuevaContraseña123*' })
   @IsOptional()
-  @IsString({ message: 'La contraseña debe ser una cadena de texto' })
-  @MinLength(6, { message: 'La contraseña debe tener mínimo 6 caracteres' })
+  @ContrasenaSegura()
   password?: string;
 
-  @ApiProperty({ example: 'Juan', required: false })
+  @ApiPropertyOptional({ example: 'Juan' })
   @IsOptional()
   @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
   nombres?: string;
 
-  @ApiProperty({ example: 'Pérez', required: false })
+  @ApiPropertyOptional({ example: 'Pérez' })
   @IsOptional()
   @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
   apellidos?: string;
 
-  @ApiProperty({ example: '+57 300 123 4567', required: false })
+  @ApiPropertyOptional({ example: '+57 300 123 4567' })
   @IsOptional()
   @IsString()
+  @MaxLength(30)
   telefono?: string;
 
-  @ApiProperty({ example: 'c1d2e3f4-a5b6-7c8d-9e0f-1a2b3c4d5e6f', required: false })
+  @ApiPropertyOptional({ example: 'c1d2e3f4-a5b6-7c8d-9e0f-1a2b3c4d5e6f' })
   @IsOptional()
   @IsUUID('4', { message: 'idRol debe ser un UUID válido' })
   idRol?: string;
 
-  @ApiProperty({ example: true, required: false })
+  @ApiPropertyOptional({ example: true })
   @IsOptional()
   @IsBoolean()
   activo?: boolean;
+}
+
+export class ConsultaUsuariosDto extends PaginacionDto {
+  @ApiPropertyOptional({ description: 'Busca en nombres, apellidos y correo' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  search?: string;
+
+  @ApiPropertyOptional({ description: 'Filtrar por UUID de rol' })
+  @IsOptional()
+  @IsUUID()
+  idRol?: string;
 }

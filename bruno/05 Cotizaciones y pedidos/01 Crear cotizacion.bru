@@ -1,0 +1,42 @@
+meta {
+  name: Crear cotizacion
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/cotizaciones
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+body:json {
+  {
+    "idCliente": "{{idCliente}}",
+    "items": [
+      {
+        "idProducto": "{{idProducto}}",
+        "cantidad": 1,
+        "valorUnitario": 50000,
+        "pctIva": 19
+      }
+    ]
+  }
+}
+
+script:post-response {
+  bru.setEnvVar("idCotizacion", res.getBody().id);
+}
+
+tests {
+  test("responde 201", function () {
+    expect(res.getStatus()).to.equal(201);
+  });
+  test("numero COT", function () {
+    expect(res.getBody().numero).to.match(/^COT-/);
+  });
+}

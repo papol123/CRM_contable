@@ -1,0 +1,29 @@
+meta {
+  name: Subir logo de la empresa
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/configuracion/empresa/logo
+  body: multipartForm
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+body:multipart-form {
+  archivo: @file(archivos/logo.png)
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}
+
+docs {
+  Reemplaza el logo real de la empresa (aparece en los PDF). Súbalo de nuevo con el logo verdadero si hace falta.
+}

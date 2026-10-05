@@ -9,13 +9,10 @@ import {
   ParseUUIDPipe,
   Post,
   Put,
-  UseGuards,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermission } from '../auth/decorators/permissions.decorator';
 import { Empresa } from '../../database/entities/empresa.entity';
 import { FacturacionElectronicaService } from './facturacion-electronica.service';
@@ -23,7 +20,6 @@ import { GuardarEmpresaDto } from './dto/empresa.dto';
 
 @ApiTags('Facturación electrónica (opcional)')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller()
 export class FacturacionElectronicaController {
   constructor(

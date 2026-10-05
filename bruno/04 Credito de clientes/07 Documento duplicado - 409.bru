@@ -1,0 +1,35 @@
+meta {
+  name: Documento duplicado - 409
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/clientes
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+body:json {
+  {
+    "idTipoDocumento": "{{idTipoDocCliente}}",
+    "numeroDocumento": "{{documentoCliente}}",
+    "razonSocial": "Duplicado",
+    "tipoPersona": "JURIDICA"
+  }
+}
+
+tests {
+  test("responde 409", function () {
+    expect(res.getStatus()).to.equal(409);
+  });
+  test("error en formato RFC 9457 (application/problem+json)", function () {
+    expect(res.getHeader("content-type")).to.contain("application/problem+json");
+    expect(res.getBody()).to.have.property("type");
+    expect(res.getBody()).to.have.property("instance");
+  });
+}

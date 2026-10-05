@@ -1,5 +1,9 @@
 import {
+  ArrayMaxSize,
   ArrayMinSize,
+  IsBoolean,
+  MaxLength,
+  MinLength,
   IsArray,
   IsDateString,
   IsNotEmpty,
@@ -12,7 +16,8 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
+import { PaginacionDto } from '../../../common/paginacion/paginacion';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 /** Línea de factura, cotización o pedido. */
@@ -22,13 +27,15 @@ export class ItemFacturaVentaDto {
   @IsUUID()
   idProducto: string;
 
-  @ApiProperty({ example: 2, description: 'Cantidad (mayor que cero)' })
-  @IsNumber()
+  @ApiProperty({ example: 2, description: 'Cantidad (mayor que cero, hasta 3 decimales)' })
+  @IsNumber({ maxDecimalPlaces: 3 })
+  @Max(999999999)
   @IsPositive({ message: 'La cantidad debe ser mayor que cero' })
   cantidad: number;
 
-  @ApiProperty({ example: 185000.0, description: 'Precio unitario' })
-  @IsNumber()
+  @ApiProperty({ example: 185000.0, description: 'Precio unitario (hasta 2 decimales)' })
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Max(9999999999999)
   @Min(0, { message: 'El valor unitario no puede ser negativo' })
   valorUnitario: number;
 
@@ -83,11 +90,13 @@ export class CreateFacturaVentaDto {
   @ApiPropertyOptional({ example: 'Entrega en taller del cliente' })
   @IsOptional()
   @IsString()
+  @MaxLength(1000)
   observaciones?: string;
 
   @ApiProperty({ type: [ItemFacturaVentaDto] })
   @IsArray()
-  @ArrayMinSize(1, { message: 'La factura debe incluir al menos un producto' })
+  @ArrayMinSize(1, { message: 'La remisión debe incluir al menos un producto' })
+  @ArrayMaxSize(300)
   @ValidateNested({ each: true })
   @Type(() => ItemFacturaVentaDto)
   items: ItemFacturaVentaDto[];
@@ -118,12 +127,44 @@ export class UpdateFacturaVentaDto {
   @ApiPropertyOptional({ example: 'Entrega en taller de cliente' })
   @IsOptional()
   @IsString()
+  @MaxLength(1000)
   observaciones?: string;
 }
 
 export class AnularDocumentoDto {
-  @ApiProperty({ example: 'Devolución total por garantía del cliente', description: 'Motivo de la anulación' })
-  @IsNotEmpty()
+  @ApiProperty({ example: 'Devolución total por garantía del cliente', description: 'Motivo (obligatorio, queda en la bitácora)' })
   @IsString()
+  @IsNotEmpty({ message: 'El motivo es obligatorio' })
+  @MinLength(5, { message: 'Describa el motivo con al menos 5 caracteres' })
+  @MaxLength(500)
   motivo: string;
+}
+
+export class ConsultaRemisionesDto extends PaginacionDto {
+  @ApiPropertyOptional({ description: 'Número de remisión, cliente o documento' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  search?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  clienteId?: string;
+
+  @ApiPropertyOptional({ type: Boolean })
+  @IsOptional()
+  @Transform(({ value }) => (value === 'true' ? true : value === 'false' ? false : value))
+  @IsBoolean()
+  anulada?: boolean;
+
+  @ApiPropertyOptional({ example: '2026-09-01' })
+  @IsOptional()
+  @IsDateString()
+  desde?: string;
+
+  @ApiPropertyOptional({ example: '2026-09-30' })
+  @IsOptional()
+  @IsDateString()
+  hasta?: string;
 }

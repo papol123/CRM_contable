@@ -7,7 +7,6 @@ import {
   Delete,
   Body,
   Param,
-  UseGuards,
   HttpCode,
   HttpStatus,
   ParseUUIDPipe,
@@ -15,13 +14,11 @@ import {
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { RolesService } from '../roles.service';
 import { CreateRoleDto, UpdateRoleDto, ReplaceRolePermisosDto } from '../dto/role.dto';
-import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
-import { PermissionsGuard } from '../../auth/guards/permissions.guard';
 import { RequirePermission } from '../../auth/decorators/permissions.decorator';
+import { Auditar } from '../../auditoria/auditar';
 
 @ApiTags('Roles y permisos')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller()
 export class RolesController {
   constructor(private readonly rolesService: RolesService) {}
@@ -66,6 +63,7 @@ export class RolesController {
   @Post('roles')
   @HttpCode(HttpStatus.CREATED)
   @RequirePermission('roles.gestionar')
+  @Auditar({ accion: 'CREAR', recurso: 'roles' })
   @ApiOperation({ summary: 'Crear rol' })
   @ApiResponse({ status: 409, description: 'Código de rol duplicado' })
   async create(@Body() dto: CreateRoleDto) {
@@ -74,6 +72,7 @@ export class RolesController {
 
   @Patch('roles/:id')
   @RequirePermission('roles.gestionar')
+  @Auditar({ accion: 'ACTUALIZAR', recurso: 'roles' })
   @ApiOperation({ summary: 'Actualizar rol' })
   async update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateRoleDto) {
     return this.rolesService.update(id, dto);
@@ -81,13 +80,15 @@ export class RolesController {
 
   @Put('roles/:id/permisos')
   @RequirePermission('roles.gestionar')
-  @ApiOperation({ summary: 'Reemplazar los permisos del rol' })
+  @Auditar({ accion: 'REEMPLAZAR_PERMISOS', recurso: 'roles' })
+  @ApiOperation({ summary: 'Reemplazar los permisos del rol (efecto inmediato en las sesiones abiertas)' })
   async replacePermisos(@Param('id', ParseUUIDPipe) id: string, @Body() dto: ReplaceRolePermisosDto) {
     return this.rolesService.replacePermisos(id, dto.permisos);
   }
 
   @Delete('roles/:id')
   @RequirePermission('roles.gestionar')
+  @Auditar({ accion: 'ELIMINAR', recurso: 'roles' })
   @ApiOperation({ summary: 'Eliminar rol sin usuarios asignados' })
   @ApiResponse({ status: 409, description: 'El rol tiene usuarios asignados' })
   async remove(@Param('id', ParseUUIDPipe) id: string) {

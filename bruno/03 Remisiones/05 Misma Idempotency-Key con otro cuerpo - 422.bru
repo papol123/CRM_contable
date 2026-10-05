@@ -1,0 +1,48 @@
+meta {
+  name: Misma Idempotency-Key con otro cuerpo - 422
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/facturas-venta
+  body: json
+  auth: bearer
+}
+
+headers {
+  Idempotency-Key: {{claveIdem}}
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+body:json {
+  {
+    "idCliente": "{{idCliente}}",
+    "idBodega": "{{idBodega}}",
+    "fechaVencimiento": "{{hoy}}",
+    "items": [
+      {
+        "idProducto": "{{idProducto}}",
+        "cantidad": 1,
+        "valorUnitario": 100000,
+        "pctDescuento": 10,
+        "pctIva": 19
+      }
+    ],
+    "observaciones": "cuerpo distinto"
+  }
+}
+
+tests {
+  test("responde 422", function () {
+    expect(res.getStatus()).to.equal(422);
+  });
+  test("error en formato RFC 9457 (application/problem+json)", function () {
+    expect(res.getHeader("content-type")).to.contain("application/problem+json");
+    expect(res.getBody()).to.have.property("type");
+    expect(res.getBody()).to.have.property("instance");
+  });
+}

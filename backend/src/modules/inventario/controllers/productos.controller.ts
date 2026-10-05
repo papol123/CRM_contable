@@ -7,118 +7,142 @@ import {
   Body,
   Param,
   Query,
-  UseGuards,
   HttpCode,
   HttpStatus,
   ParseUUIDPipe,
+  ParseArrayPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { ProductosService } from '../productos.service';
-import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
-import { PermissionsGuard } from '../../auth/guards/permissions.guard';
 import { RequirePermission } from '../../auth/decorators/permissions.decorator';
+import { Actor } from '../../auth/decorators/actor.decorator';
+import { Auditar } from '../../auditoria/auditar';
 import {
   CreateProductoDto,
   UpdateProductoDto,
   UpdatePrecioDto,
   UpdateStockMinimoDto,
   PreciosMasivosDto,
+  EquivalenciaDto,
+  ConsultaProductosDto,
+  BuscarProductosDto,
 } from '../dto/producto.dto';
 
 @ApiTags('Productos')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('productos')
 export class ProductosController {
   constructor(private readonly productosService: ProductosService) {}
 
   @Get()
   @RequirePermission('inventario.consultar')
-  @ApiOperation({ summary: 'Listar productos con saldos y filtros' })
-  @ApiQuery({ name: 'search', required: false })
-  @ApiQuery({ name: 'categoriaId', required: false })
-  async findAll(@Query('search') search?: string, @Query('categoriaId') categoriaId?: string) {
-    return this.productosService.findAll(search, categoriaId);
+  @ApiOperation({ summary: 'Listar productos con saldo (paginado; filtra por texto, categoría y marca)' })
+  async findAll(@Query() filtros: ConsultaProductosDto) {
+    return this.productosService.findAll(filtros);
   }
 
   @Get('buscar')
   @RequirePermission('inventario.consultar')
-  @ApiOperation({ summary: 'Búsqueda rápida por código o referencia' })
-  @ApiQuery({ name: 'q', required: true })
-  async buscar(@Query('q') q: string) {
-    return this.productosService.buscar(q);
+  @ApiOperation({ summary: 'Búsqueda rápida de productos activos por código o nombre (máx. 15)' })
+  async buscar(@Query() q: BuscarProductosDto) {
+    return this.productosService.buscar(q.q);
+  }
+
+  @Post('precios/masivo')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermission('productos.precios')
+  @ApiOperation({ summary: 'Actualización masiva de precios (todo o nada, auditada)' })
+  async actualizarPreciosMasivo(@Body() dto: PreciosMasivosDto, @Actor() actor: Actor) {
+    return this.productosService.actualizarPreciosMasivo(dto, actor);
+  }
+
+  @Post('importar')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermission('productos.importar')
+  @Auditar({ accion: 'IMPORTAR', recurso: 'productos' })
+  @ApiBody({ type: [CreateProductoDto] })
+  @ApiOperation({ summary: 'Importar catálogo de productos (arreglo; informa errores por fila)' })
+  async importar(
+    @Body(new ParseArrayPipe({ items: CreateProductoDto, whitelist: true, forbidNonWhitelisted: true }))
+    productos: CreateProductoDto[],
+    @Actor() actor: Actor,
+  ) {
+    return this.productosService.importar(productos.slice(0, 5000), actor);
   }
 
   @Get(':id')
   @RequirePermission('inventario.consultar')
-  @ApiOperation({ summary: 'Consultar detalle del producto con saldos por bodega' })
-  async findOne(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string) {
+  @ApiOperation({ summary: 'Detalle del producto: precios, impuesto y saldos por bodega' })
+  async findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.productosService.findById(id);
   }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @RequirePermission('inventario.ajustar')
-  @ApiOperation({ summary: 'Crear nuevo producto' })
-  async create(@Body() dto: CreateProductoDto) {
-    return this.productosService.create(dto);
+  @RequirePermission('productos.crear')
+  @ApiOperation({ summary: 'Crear producto (el precio base requiere productos.precios)' })
+  @ApiResponse({ status: 409, description: 'Código duplicado' })
+  async create(@Body() dto: CreateProductoDto, @Actor() actor: Actor) {
+    return this.productosService.create(dto, actor);
   }
 
   @Patch(':id')
-  @RequirePermission('inventario.ajustar')
-  @ApiOperation({ summary: 'Actualizar descripción, unidad o categoría' })
-  async update(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
-    @Body() dto: UpdateProductoDto,
-  ) {
-    return this.productosService.update(id, dto);
+  @RequirePermission('productos.editar')
+  @ApiOperation({ summary: 'Actualizar datos no financieros: nombre, marca, categoría, unidad, impuesto' })
+  async update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateProductoDto, @Actor() actor: Actor) {
+    return this.productosService.update(id, dto, actor);
   }
 
   @Delete(':id')
-  @RequirePermission('configuracion.gestionar')
-  @ApiOperation({ summary: 'Borrado lógico de producto (solo Administrador)' })
-  async remove(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string) {
-    return this.productosService.remove(id);
+  @RequirePermission('productos.eliminar')
+  @ApiOperation({ summary: 'Borrado lógico (bloqueado si tiene existencias o pedidos abiertos)' })
+  @ApiResponse({ status: 409, description: 'Tiene existencias, pedidos abiertos o ya está inactivo' })
+  async remove(@Param('id', ParseUUIDPipe) id: string, @Actor() actor: Actor) {
+    return this.productosService.remove(id, actor);
   }
 
   @Patch(':id/precio')
-  @RequirePermission('configuracion.gestionar')
-  @ApiOperation({ summary: 'Cambiar precio del producto (solo Administrador)' })
-  async updatePrecio(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
-    @Body() dto: UpdatePrecioDto,
-  ) {
-    return this.productosService.updatePrecio(id, dto);
+  @RequirePermission('productos.precios')
+  @ApiOperation({ summary: 'Cambiar el precio de venta en una lista (cierra la vigencia del anterior; auditado)' })
+  async updatePrecio(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdatePrecioDto, @Actor() actor: Actor) {
+    return this.productosService.updatePrecio(id, dto, actor);
   }
 
   @Patch(':id/stock-minimo')
-  @RequirePermission('configuracion.gestionar')
-  @ApiOperation({ summary: 'Definir stock mínimo (solo Administrador)' })
-  async updateStockMinimo(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
-    @Body() dto: UpdateStockMinimoDto,
-  ) {
+  @RequirePermission('inventario.ajustar')
+  @Auditar({ accion: 'DEFINIR_STOCK_MINIMO', recurso: 'productos', registrarCuerpo: true })
+  @ApiOperation({ summary: 'Definir stock mínimo para alertas' })
+  async updateStockMinimo(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateStockMinimoDto) {
     return this.productosService.updateStockMinimo(id, dto);
   }
 
   @Get(':id/historial-precios')
-  @RequirePermission('configuracion.gestionar')
-  @ApiOperation({ summary: 'Consultar historial de cambios de precio' })
-  async historialPrecios(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string) {
+  @RequirePermission('productos.precios', 'inventario.costos')
+  @ApiOperation({ summary: 'Historial de precios de venta y de costos de compra' })
+  async historialPrecios(@Param('id', ParseUUIDPipe) id: string) {
     return this.productosService.historialPrecios(id);
   }
 
   @Get(':id/margen')
   @RequirePermission('inventario.costos')
-  @ApiOperation({ summary: 'Consultar margen y costos de adquisición' })
-  async getMargen(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string) {
+  @ApiOperation({ summary: 'Costo promedio, precio público y margen' })
+  async getMargen(@Param('id', ParseUUIDPipe) id: string) {
     return this.productosService.getMargen(id);
   }
 
-  @Post('precios/masivo')
-  @RequirePermission('configuracion.gestionar')
-  @ApiOperation({ summary: 'Actualización masiva de precios (solo Administrador)' })
-  async actualizarPreciosMasivo(@Body() dto: PreciosMasivosDto) {
-    return this.productosService.actualizarPreciosMasivo(dto);
+  @Get(':id/equivalencias')
+  @RequirePermission('inventario.consultar')
+  @ApiOperation({ summary: 'Productos equivalentes' })
+  async getEquivalencias(@Param('id', ParseUUIDPipe) id: string) {
+    return this.productosService.getEquivalencias(id);
+  }
+
+  @Post(':id/equivalencias')
+  @HttpCode(HttpStatus.CREATED)
+  @RequirePermission('productos.editar')
+  @Auditar({ accion: 'REGISTRAR_EQUIVALENCIA', recurso: 'productos', registrarCuerpo: true })
+  @ApiOperation({ summary: 'Registrar producto equivalente (en ambos sentidos)' })
+  async createEquivalencia(@Param('id', ParseUUIDPipe) id: string, @Body() dto: EquivalenciaDto) {
+    return this.productosService.createEquivalencia(id, dto.idEquivalente, dto.observacion);
   }
 }

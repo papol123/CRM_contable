@@ -1,0 +1,21 @@
+meta {
+  name: Eliminar producto con stock - 409
+  type: http
+  seq: 15
+}
+
+delete {
+  url: {{baseUrl}}/productos/{{idProducto}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+tests {
+  test("responde 409", function () {
+    expect(res.getStatus()).to.equal(409);
+  });
+}

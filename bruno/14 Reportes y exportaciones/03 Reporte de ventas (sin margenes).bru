@@ -1,0 +1,21 @@
+meta {
+  name: Reporte de ventas (sin margenes)
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/reportes/ventas
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

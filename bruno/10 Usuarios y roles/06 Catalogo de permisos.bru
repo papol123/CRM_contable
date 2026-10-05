@@ -1,0 +1,21 @@
+meta {
+  name: Catalogo de permisos
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/permisos
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

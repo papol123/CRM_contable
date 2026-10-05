@@ -1,0 +1,30 @@
+meta {
+  name: Usuario intenta ajustar - 403
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/inventario/ajustes
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+body:json {
+  {
+    "idProducto": "{{idProducto}}",
+    "idBodega": "{{idBodega}}",
+    "cantidadFisica": 1,
+    "motivo": "Conteo"
+  }
+}
+
+tests {
+  test("responde 403", function () {
+    expect(res.getStatus()).to.equal(403);
+  });
+}

@@ -1,0 +1,30 @@
+meta {
+  name: Guardar configuracion propia del dashboard
+  type: http
+  seq: 2
+}
+
+put {
+  url: {{baseUrl}}/dashboard/config
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+body:json {
+  {
+    "graficas": [
+      "ventas_mes",
+      "top_productos"
+    ]
+  }
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

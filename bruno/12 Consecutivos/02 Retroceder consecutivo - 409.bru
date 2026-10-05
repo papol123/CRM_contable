@@ -1,0 +1,28 @@
+meta {
+  name: Retroceder consecutivo - 409
+  type: http
+  seq: 2
+}
+
+patch {
+  url: {{baseUrl}}/consecutivos/REMISION
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+body:json {
+  {
+    "siguiente": 1,
+    "motivo": "Intento de retroceso"
+  }
+}
+
+tests {
+  test("responde 409", function () {
+    expect(res.getStatus()).to.equal(409);
+  });
+}

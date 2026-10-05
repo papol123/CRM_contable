@@ -1,0 +1,41 @@
+meta {
+  name: Abrir conteo ciclico
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{baseUrl}}/inventario/conteos
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+body:json {
+  {
+    "idBodega": "{{idBodega2}}",
+    "observacion": "Prueba Bruno"
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 201) {
+    bru.setEnvVar("idConteo", res.getBody().id_conteo);
+    const item = res.getBody().items[0];
+    bru.setEnvVar("idProductoConteo", item.id_producto);
+    bru.setEnvVar("fisicoConteo", Number(item.stock_sistema) + 1);
+  }
+}
+
+tests {
+  test("responde 201 o 409", function () {
+    expect([201, 409]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  409 si la bodega ya tiene un conteo abierto (de una corrida anterior): ciérrelo o use otra bodega.
+}

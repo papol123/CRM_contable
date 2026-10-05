@@ -1,0 +1,28 @@
+meta {
+  name: Avanzar estado a EN_PROCESO
+  type: http
+  seq: 8
+}
+
+patch {
+  url: {{baseUrl}}/pedidos/{{idPedido}}/estado
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+body:json {
+  {
+    "estado": "EN_PROCESO",
+    "observacion": "Alistando"
+  }
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

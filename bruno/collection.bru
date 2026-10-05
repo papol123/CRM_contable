@@ -1,0 +1,77 @@
+script:pre-request {
+  // Preparación automática antes de cada petición:
+  //  1) inicia sesión cuando un token falta o está por vencer (el access token dura 15 min);
+  //  2) carga los IDs base (producto con stock, cliente, bodegas, proveedor...) si faltan.
+  // Así cualquier carpeta o petición se puede correr sola, sin depender de 01 y 02.
+  // Las peticiones de /auth/ (login, recuperación) no necesitan preparación
+  if (!req.getUrl().includes("/auth/")) {
+    const base = bru.getEnvVar("baseUrl");
+    const clave = bru.getEnvVar("claveSemilla");
+    const leer = (k) => bru.getEnvVar(k);
+    // Variables de entorno: algunas versiones de Bruno no conservan bru.setVar entre peticiones
+    const guardar = (k, v) => bru.setEnvVar(k, v);
+
+    // Segundos que le quedan al JWT (decodifica el payload sin librerías)
+    function segundosRestantes(token) {
+      try {
+        const b64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+        const tabla = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        let bits = 0, acumulado = 0, texto = "";
+        for (const c of b64) {
+          if (c === "=") break;
+          acumulado = (acumulado << 6) | tabla.indexOf(c);
+          bits += 6;
+          if (bits >= 8) {
+            bits -= 8;
+            texto += String.fromCharCode((acumulado >> bits) & 0xff);
+          }
+        }
+        return JSON.parse(texto).exp - Date.now() / 1000;
+      } catch (e) {
+        return -1;
+      }
+    }
+
+    async function asegurarToken(variable, email) {
+      const actual = leer(variable);
+      if (actual && segundosRestantes(actual) > 60) return actual;
+      const res = await bru.sendRequest({
+        method: "POST",
+        url: base + "/auth/login",
+        headers: { "Content-Type": "application/json" },
+        data: { email: email, password: clave },
+      });
+      if (res.status !== 200) throw new Error("No se pudo iniciar sesión con " + email + ": " + res.status);
+      guardar(variable, res.data.accessToken);
+      return res.data.accessToken;
+    }
+
+    await asegurarToken("tokenAdmin", "admin@crmcontable.com");
+    const tokenUsuario = await asegurarToken("tokenUsuario", "usuario@crmcontable.com");
+    await asegurarToken("tokenVendedor", "vendedor@crmcontable.com");
+
+    if (!leer("idProducto") || !leer("idCliente") || !leer("idProveedor")) {
+      const get = async (ruta) => {
+        const r = await bru.sendRequest({ method: "GET", url: base + ruta, headers: { Authorization: "Bearer " + tokenUsuario } });
+        if (r.status !== 200) throw new Error("GET " + ruta + " respondió " + r.status);
+        return r.data;
+      };
+      const bodegas = (await get("/bodegas")).filter((b) => b.activo);
+      guardar("idBodega2", (bodegas[1] || bodegas[0]).id);
+      const fila = (await get("/inventario?limit=100")).data.find((s) => s.disponible > 10);
+      if (fila) {
+        guardar("idProducto", fila.idProducto);
+        guardar("codigoProducto", fila.codigo);
+        guardar("idBodega", fila.idBodega);
+      }
+      guardar("idMetodoPago", (await get("/medios-pago"))[0].id);
+      guardar("idCategoriaGasto", (await get("/categorias-gasto"))[0].id);
+      guardar("idTipoDocumento", (await get("/tipos-documento"))[0].id);
+      const cliente = (await get("/clientes?limit=50")).data.find((c) => c.tercero.activo);
+      guardar("idCliente", cliente.id);
+      guardar("documentoCliente", cliente.tercero.numeroDocumento);
+      guardar("idTipoDocCliente", cliente.tercero.idTipoDocumento);
+      guardar("idProveedor", (await get("/proveedores?limit=50")).data.find((p) => p.tercero.activo).id);
+    }
+  }
+}

@@ -1,0 +1,21 @@
+meta {
+  name: Listar remisiones (filtros y paginado)
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/facturas-venta?limit=10&clienteId={{idCliente}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

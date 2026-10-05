@@ -1,0 +1,21 @@
+meta {
+  name: Usuario pide rentabilidad - 403
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/reportes/rentabilidad
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+tests {
+  test("responde 403", function () {
+    expect(res.getStatus()).to.equal(403);
+  });
+}

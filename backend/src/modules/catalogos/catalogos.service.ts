@@ -16,6 +16,7 @@ import { Producto } from '../../database/entities/producto.entity';
 import { CreateMarcaDto, UpdateMarcaDto } from './dto/marca.dto';
 import { CreateCategoriaDto, UpdateCategoriaDto } from './dto/categoria.dto';
 import { CreateBodegaDto, UpdateBodegaDto } from './dto/bodega.dto';
+import { ESTADOS_PEDIDO_CON_RESERVA, sqlCantidadConSigno } from '../../common/inventario/stock';
 import {
   CreateImpuestoDto,
   UpdateImpuestoDto,
@@ -195,12 +196,42 @@ export class CatalogosService {
     return this.bodegaRepository.save(bodega);
   }
 
+  /**
+   * Una bodega con existencias, pedidos que reservan stock o conteos abiertos
+   * no se elimina (catálogo §22). Sin movimientos se borra; con historial se desactiva.
+   */
   async deleteBodega(id: string): Promise<{ message: string }> {
     const bodega = await this.bodegaRepository.findOne({ where: { id } });
     if (!bodega) throw new NotFoundException(`Bodega con ID ${id} no encontrada`);
+
+    const [uso] = await this.bodegaRepository.manager.query(
+      `SELECT
+         (SELECT COALESCE(SUM(${sqlCantidadConSigno('m')}), 0) FROM movimientos_inventario m WHERE m.id_bodega = $1) AS existencias,
+         (SELECT COUNT(*) FROM movimientos_inventario WHERE id_bodega = $1)::int AS movimientos,
+         (SELECT COUNT(*) FROM pedidos WHERE id_bodega = $1 AND estado = ANY($2))::int AS pedidos,
+         (SELECT COUNT(*) FROM conteos_inventario WHERE id_bodega = $1 AND estado = 'ABIERTO')::int AS conteos`,
+      [id, ESTADOS_PEDIDO_CON_RESERVA],
+    );
+    if (Number(uso.existencias) !== 0) {
+      throw new ConflictException(
+        `La bodega ${bodega.codigo} tiene ${Number(uso.existencias)} unidades en existencia. Trasládelas antes de eliminarla`,
+      );
+    }
+    if (uso.pedidos > 0) throw new ConflictException(`La bodega tiene ${uso.pedidos} pedido(s) abiertos`);
+    if (uso.conteos > 0) throw new ConflictException('La bodega tiene un conteo de inventario abierto');
+
+    const activas = await this.bodegaRepository.count({ where: { activo: true } });
+    if (bodega.activo && activas <= 1) {
+      throw new ConflictException('Debe quedar al menos una bodega activa');
+    }
+
+    if (uso.movimientos === 0) {
+      await this.bodegaRepository.remove(bodega);
+      return { message: `Bodega ${bodega.codigo} eliminada` };
+    }
     bodega.activo = false;
     await this.bodegaRepository.save(bodega);
-    return { message: 'Bodega desactivada exitosamente' };
+    return { message: `Bodega ${bodega.codigo} desactivada (conserva su historial de movimientos)` };
   }
 
   // ─── Categorías de Gasto ───────────────────────────────────────────────────

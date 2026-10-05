@@ -1,0 +1,21 @@
+meta {
+  name: Busqueda rapida de productos
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/productos/buscar?q={{codigoProducto}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

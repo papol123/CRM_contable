@@ -1,0 +1,26 @@
+meta {
+  name: Perfil propio (me)
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/auth/me
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("Usuario tiene permisos operativos", function () {
+    expect(res.getBody().permisos).to.include("ventas.crear");
+    expect(res.getBody().permisos).to.include("inventario.movimientos");
+    expect(res.getBody().permisos).to.not.include("ventas.anular");
+  });
+}

@@ -1,0 +1,14 @@
+node_modules
+dist
+coverage
+uploads
+.local-pg
+.local-pg-test
+.env
+.env.*
+credentials
+test
+scripts
+database
+docs
+*.log

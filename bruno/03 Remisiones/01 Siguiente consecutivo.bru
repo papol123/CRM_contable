@@ -1,0 +1,24 @@
+meta {
+  name: Siguiente consecutivo
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/facturas-venta/siguiente-consecutivo
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("consecutivo REM", function () {
+    expect(res.getBody().siguienteNumero).to.match(/^REM-/);
+  });
+}

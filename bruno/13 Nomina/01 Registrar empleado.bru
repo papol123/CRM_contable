@@ -1,0 +1,40 @@
+meta {
+  name: Registrar empleado
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/empleados
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+body:json {
+  {
+    "idTipoDocumento": "{{idTipoDocumento}}",
+    "numeroDocumento": "{{documentoEmpleado}}",
+    "nombreCompleto": "Empleado Prueba Bruno",
+    "cargo": "Bodeguero",
+    "salarioBase": 1423500,
+    "fechaIngreso": "2026-01-01"
+  }
+}
+
+script:pre-request {
+  bru.setEnvVar("documentoEmpleado", String(Date.now()).slice(-10));
+}
+
+script:post-response {
+  bru.setEnvVar("idEmpleado", res.getBody().id);
+}
+
+tests {
+  test("responde 201", function () {
+    expect(res.getStatus()).to.equal(201);
+  });
+}

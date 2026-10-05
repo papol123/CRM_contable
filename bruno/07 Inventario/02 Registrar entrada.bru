@@ -1,0 +1,30 @@
+meta {
+  name: Registrar entrada
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/inventario/entradas
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+body:json {
+  {
+    "idProducto": "{{idProducto}}",
+    "idBodega": "{{idBodega}}",
+    "cantidad": 2,
+    "motivo": "Prueba Bruno: entrada"
+  }
+}
+
+tests {
+  test("responde 201", function () {
+    expect(res.getStatus()).to.equal(201);
+  });
+}

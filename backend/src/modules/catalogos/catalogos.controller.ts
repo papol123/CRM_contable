@@ -7,16 +7,14 @@ import {
   Body,
   Param,
   Query,
-  UseGuards,
   HttpCode,
   HttpStatus,
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { CatalogosService } from './catalogos.service';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { PermissionsGuard } from '../auth/guards/permissions.guard';
-import { RequirePermission } from '../auth/decorators/permissions.decorator';
+import { Autenticado, RequirePermission } from '../auth/decorators/permissions.decorator';
+import { Auditar } from '../auditoria/auditar';
 import { CreateCategoriaDto, UpdateCategoriaDto } from './dto/categoria.dto';
 import { CreateBodegaDto, UpdateBodegaDto } from './dto/bodega.dto';
 import {
@@ -29,7 +27,8 @@ import { CreateMarcaDto, UpdateMarcaDto } from './dto/marca.dto';
 
 @ApiTags('Catálogos')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+// Lectura: cualquier usuario autenticado (alimentan formularios). Escritura: catalogos.gestionar
+@Autenticado()
 @Controller()
 export class CatalogosController {
   constructor(private readonly catalogosService: CatalogosService) {}
@@ -43,11 +42,23 @@ export class CatalogosController {
     return this.catalogosService.findAllPaises();
   }
 
+  @Get('paises/:id/departamentos')
+  @ApiOperation({ summary: 'Departamentos de un país específico' })
+  async getDepartamentosPorPais(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string) {
+    return this.catalogosService.findDepartamentos(id);
+  }
+
   @Get('departamentos')
   @ApiOperation({ summary: 'Listar departamentos (filtrables por país)' })
   @ApiQuery({ name: 'paisId', required: false, description: 'UUID del país' })
   async getDepartamentos(@Query('paisId') paisId?: string) {
     return this.catalogosService.findDepartamentos(paisId);
+  }
+
+  @Get('departamentos/:id/ciudades')
+  @ApiOperation({ summary: 'Ciudades de un departamento específico' })
+  async getCiudadesPorDepartamento(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string) {
+    return this.catalogosService.findCiudades(id);
   }
 
   @Get('ciudades')
@@ -76,16 +87,16 @@ export class CatalogosController {
   }
 
   @Post('categorias')
-  @UseGuards(PermissionsGuard)
-  @RequirePermission('configuracion.gestionar')
+  @RequirePermission('catalogos.gestionar')
+  @Auditar({ accion: 'CREAR', recurso: 'categorias', registrarCuerpo: true })
   @ApiOperation({ summary: 'Crear nueva categoría de producto' })
   async createCategoria(@Body() dto: CreateCategoriaDto) {
     return this.catalogosService.createCategoria(dto);
   }
 
   @Patch('categorias/:id')
-  @UseGuards(PermissionsGuard)
-  @RequirePermission('configuracion.gestionar')
+  @RequirePermission('catalogos.gestionar')
+  @Auditar({ accion: 'ACTUALIZAR', recurso: 'categorias', registrarCuerpo: true })
   @ApiOperation({ summary: 'Actualizar categoría de producto' })
   async updateCategoria(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
@@ -95,8 +106,8 @@ export class CatalogosController {
   }
 
   @Delete('categorias/:id')
-  @UseGuards(PermissionsGuard)
-  @RequirePermission('configuracion.gestionar')
+  @RequirePermission('catalogos.gestionar')
+  @Auditar({ accion: 'ELIMINAR', recurso: 'categorias', registrarCuerpo: true })
   @ApiOperation({ summary: 'Eliminar categoría de producto' })
   async deleteCategoria(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string) {
     return this.catalogosService.deleteCategoria(id);
@@ -119,16 +130,16 @@ export class CatalogosController {
   }
 
   @Post('impuestos')
-  @UseGuards(PermissionsGuard)
-  @RequirePermission('configuracion.gestionar')
+  @RequirePermission('catalogos.gestionar')
+  @Auditar({ accion: 'CREAR', recurso: 'impuestos', registrarCuerpo: true })
   @ApiOperation({ summary: 'Crear nueva tarifa de impuesto' })
   async createImpuesto(@Body() dto: CreateImpuestoDto) {
     return this.catalogosService.createImpuesto(dto);
   }
 
   @Patch('impuestos/:id')
-  @UseGuards(PermissionsGuard)
-  @RequirePermission('configuracion.gestionar')
+  @RequirePermission('catalogos.gestionar')
+  @Auditar({ accion: 'ACTUALIZAR', recurso: 'impuestos', registrarCuerpo: true })
   @ApiOperation({ summary: 'Actualizar tarifa de impuesto' })
   async updateImpuesto(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
@@ -160,16 +171,16 @@ export class CatalogosController {
   }
 
   @Post('bodegas')
-  @UseGuards(PermissionsGuard)
-  @RequirePermission('configuracion.gestionar')
+  @RequirePermission('catalogos.gestionar')
+  @Auditar({ accion: 'CREAR', recurso: 'bodegas', registrarCuerpo: true })
   @ApiOperation({ summary: 'Crear nueva bodega' })
   async createBodega(@Body() dto: CreateBodegaDto) {
     return this.catalogosService.createBodega(dto);
   }
 
   @Patch('bodegas/:id')
-  @UseGuards(PermissionsGuard)
-  @RequirePermission('configuracion.gestionar')
+  @RequirePermission('catalogos.gestionar')
+  @Auditar({ accion: 'ACTUALIZAR', recurso: 'bodegas', registrarCuerpo: true })
   @ApiOperation({ summary: 'Actualizar bodega' })
   async updateBodega(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
@@ -179,8 +190,8 @@ export class CatalogosController {
   }
 
   @Delete('bodegas/:id')
-  @UseGuards(PermissionsGuard)
-  @RequirePermission('configuracion.gestionar')
+  @RequirePermission('catalogos.gestionar')
+  @Auditar({ accion: 'ELIMINAR', recurso: 'bodegas', registrarCuerpo: true })
   @ApiOperation({ summary: 'Desactivar bodega' })
   async deleteBodega(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string) {
     return this.catalogosService.deleteBodega(id);
@@ -195,16 +206,16 @@ export class CatalogosController {
   }
 
   @Post('categorias-gasto')
-  @UseGuards(PermissionsGuard)
-  @RequirePermission('configuracion.gestionar')
+  @RequirePermission('catalogos.gestionar')
+  @Auditar({ accion: 'CREAR', recurso: 'categorias_gasto', registrarCuerpo: true })
   @ApiOperation({ summary: 'Crear nueva categoría de gasto' })
   async createCategoriaGasto(@Body() dto: CreateCategoriaGastoDto) {
     return this.catalogosService.createCategoriaGasto(dto);
   }
 
   @Patch('categorias-gasto/:id')
-  @UseGuards(PermissionsGuard)
-  @RequirePermission('configuracion.gestionar')
+  @RequirePermission('catalogos.gestionar')
+  @Auditar({ accion: 'ACTUALIZAR', recurso: 'categorias_gasto', registrarCuerpo: true })
   @ApiOperation({ summary: 'Actualizar categoría de gasto' })
   async updateCategoriaGasto(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
@@ -222,8 +233,8 @@ export class CatalogosController {
   }
 
   @Post('marcas')
-  @UseGuards(PermissionsGuard)
-  @RequirePermission('configuracion.gestionar')
+  @RequirePermission('catalogos.gestionar')
+  @Auditar({ accion: 'CREAR', recurso: 'marcas', registrarCuerpo: true })
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Crear marca (solo Administrador)' })
   async createMarca(@Body() dto: CreateMarcaDto) {
@@ -231,16 +242,16 @@ export class CatalogosController {
   }
 
   @Patch('marcas/:id')
-  @UseGuards(PermissionsGuard)
-  @RequirePermission('configuracion.gestionar')
+  @RequirePermission('catalogos.gestionar')
+  @Auditar({ accion: 'ACTUALIZAR', recurso: 'marcas', registrarCuerpo: true })
   @ApiOperation({ summary: 'Actualizar marca (solo Administrador)' })
   async updateMarca(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateMarcaDto) {
     return this.catalogosService.updateMarca(id, dto);
   }
 
   @Delete('marcas/:id')
-  @UseGuards(PermissionsGuard)
-  @RequirePermission('configuracion.gestionar')
+  @RequirePermission('catalogos.gestionar')
+  @Auditar({ accion: 'ELIMINAR', recurso: 'marcas', registrarCuerpo: true })
   @ApiOperation({ summary: 'Eliminar marca (se desactiva si tiene productos)' })
   async deleteMarca(@Param('id', ParseUUIDPipe) id: string) {
     return this.catalogosService.deleteMarca(id);

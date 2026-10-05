@@ -1,0 +1,21 @@
+meta {
+  name: Actividad del usuario
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/usuarios/{{idAdminPrincipal}}/actividad
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

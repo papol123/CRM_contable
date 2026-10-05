@@ -1,0 +1,47 @@
+meta {
+  name: Abrir y liquidar nomina
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/nomina
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+body:json {
+  {
+    "mes": {{mesNomina}},
+    "anio": {{anioNomina}}
+  }
+}
+
+script:pre-request {
+  bru.setEnvVar("mesNomina", 1 + Math.floor(Math.random() * 12));
+  bru.setEnvVar("anioNomina", 2030 + Math.floor(Math.random() * 60));
+}
+
+script:post-response {
+  bru.setEnvVar("idNomina", res.getBody().id);
+}
+
+tests {
+  test("responde 201", function () {
+    expect(res.getStatus()).to.equal(201);
+  });
+  test("liquidación con SMMLV, auxilio y aportes del 4 %", function () {
+    const d = res.getBody().detalles.find((x) => x.idEmpleado === bru.getEnvVar("idEmpleado"));
+    expect(d.auxilioTransporte).to.equal(200000);
+    expect(d.deduccionSalud).to.equal(56940);
+    expect(d.netoPagar).to.equal(1509620);
+  });
+}
+
+docs {
+  Usa un mes y año futuros aleatorios para no chocar con nóminas reales. Los valores esperados asumen NOMINA_SMMLV=1423500 y auxilio 200000.
+}

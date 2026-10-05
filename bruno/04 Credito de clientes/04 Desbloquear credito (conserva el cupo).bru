@@ -1,0 +1,31 @@
+meta {
+  name: Desbloquear credito (conserva el cupo)
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/clientes/{{idCliente}}/desbloquear-credito
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+body:json {
+  {
+    "motivo": "Acuerdo de pago (prueba Bruno)"
+  }
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("conserva el cupo anterior", function () {
+    expect(res.getBody().creditoBloqueado).to.equal(false);
+    expect(Number(res.getBody().cupoCredito)).to.equal(Number(bru.getEnvVar("cupoAntes")));
+  });
+}

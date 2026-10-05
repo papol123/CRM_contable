@@ -62,6 +62,9 @@ export class FacturaVenta {
   @Column({ name: 'observaciones', type: 'text', nullable: true })
   observaciones?: string;
 
+  @Column({ name: 'motivo_castigo', type: 'text', nullable: true })
+  motivoCastigo?: string | null;
+
   @Column({ name: 'motivo_anulacion', type: 'text', nullable: true })
   motivoAnulacion?: string;
 

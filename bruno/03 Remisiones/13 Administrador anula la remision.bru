@@ -1,0 +1,30 @@
+meta {
+  name: Administrador anula la remision
+  type: http
+  seq: 13
+}
+
+post {
+  url: {{baseUrl}}/facturas-venta/{{idRemision}}/anular
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+body:json {
+  {
+    "motivo": "Prueba de anulación desde Bruno"
+  }
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("anulada con movimientos compensatorios", function () {
+    expect(res.getBody().anulada).to.equal(true);
+  });
+}

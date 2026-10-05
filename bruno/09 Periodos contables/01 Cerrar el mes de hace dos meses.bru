@@ -1,0 +1,38 @@
+meta {
+  name: Cerrar el mes de hace dos meses
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/reportes/cierre-mensual
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+body:json {
+  {
+    "periodo": "{{mesCerrado}}",
+    "observaciones": "Prueba Bruno (se reabre al final de la carpeta)"
+  }
+}
+
+script:pre-request {
+  const d = new Date();
+  const m = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - 2, 15));
+  bru.setEnvVar("mesCerrado", m.toISOString().slice(0, 7));
+}
+
+tests {
+  test("responde 200 o 409", function () {
+    expect([200, 409]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  Cierra un mes real de la base. La última petición de esta carpeta lo reabre. 409 si ya estaba cerrado.
+}

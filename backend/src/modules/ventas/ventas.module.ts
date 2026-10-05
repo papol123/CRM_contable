@@ -15,11 +15,12 @@ import { FacturasVentaController } from './controllers/facturas-venta.controller
 import {
   CotizacionesController,
   PedidosController,
-  ResolucionesController,
+  ConsecutivosController,
 } from './controllers/ventas-documentos.controller';
 import { FacturasVentaService } from './facturas-venta.service';
 import { CotizacionesService } from './cotizaciones.service';
 import { PedidosService } from './pedidos.service';
+import { ConsecutivosService } from './consecutivos.service';
 
 @Module({
   imports: [
@@ -40,9 +41,9 @@ import { PedidosService } from './pedidos.service';
     FacturasVentaController,
     CotizacionesController,
     PedidosController,
-    ResolucionesController,
+    ConsecutivosController,
   ],
-  providers: [FacturasVentaService, CotizacionesService, PedidosService],
-  exports: [FacturasVentaService],
+  providers: [FacturasVentaService, CotizacionesService, PedidosService, ConsecutivosService],
+  exports: [FacturasVentaService, ConsecutivosService],
 })
 export class VentasModule {}

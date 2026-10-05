@@ -4,8 +4,11 @@ import { ConfigService } from '@nestjs/config';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
-import { AuthService } from './auth.service';
+import { DataSource } from 'typeorm';
+import { AuthService, duracionEnSegundos } from './auth.service';
 import { UsersService } from '../../users/users.service';
+import { TokensUsuarioService } from '../../users/tokens-usuario.service';
+import { AuditoriaService } from '../../auditoria/auditoria.service';
 import { RefreshToken } from '../../../database/entities/refresh-token.entity';
 import { User } from '../../../database/entities/user.entity';
 
@@ -63,6 +66,13 @@ describe('AuthService', () => {
     get: jest.fn().mockReturnValue(7),
   };
 
+  const mockTokens = {
+    emitir: jest.fn().mockResolvedValue('token-en-claro'),
+    enviarEnSegundoPlano: jest.fn(),
+  };
+
+  const mockAuditoria = { registrar: jest.fn().mockResolvedValue(undefined) };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -71,6 +81,9 @@ describe('AuthService', () => {
         { provide: JwtService, useValue: mockJwtService },
         { provide: ConfigService, useValue: mockConfigService },
         { provide: getRepositoryToken(RefreshToken), useValue: mockRefreshTokenRepo },
+        { provide: TokensUsuarioService, useValue: mockTokens },
+        { provide: AuditoriaService, useValue: mockAuditoria },
+        { provide: DataSource, useValue: { transaction: jest.fn() } },
       ],
     }).compile();
 
@@ -90,6 +103,20 @@ describe('AuthService', () => {
       await expect(
         service.validateCredentials('inexistente@crm.com', 'password'),
       ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('usa el mismo mensaje para correo inexistente, clave errada o usuario inactivo', async () => {
+      mockUsersService.findByEmail.mockResolvedValue(null);
+      const inexistente = await service.validateCredentials('x@crm.com', 'p').catch((e) => e.message);
+
+      mockUsersService.findByEmail.mockResolvedValue({ ...mockUser, activo: false });
+      jest.spyOn(bcrypt, 'compare').mockImplementation(async () => true);
+      const inactivo = await service.validateCredentials('admin@crmcontable.com', 'p').catch((e) => e.message);
+
+      expect(inexistente).toBe(inactivo);
+      expect(mockAuditoria.registrar).toHaveBeenCalledWith(
+        expect.objectContaining({ accion: 'LOGIN_FALLIDO', resultado: 'FALLO' }),
+      );
     });
 
     it('debe lanzar UnauthorizedException si la contraseña no coincide', async () => {
@@ -117,6 +144,38 @@ describe('AuthService', () => {
       expect(result.response.user.rol).toBe('ADMIN');
       expect(result.response.user.permisos).toContain('ventas.crear');
       expect(result.rawRefreshToken).toBeDefined();
+    });
+  });
+
+  describe('forgotPassword', () => {
+    it('responde lo mismo exista o no el correo y solo envía enlace a cuentas activas', async () => {
+      mockUsersService.findByEmail.mockResolvedValueOnce(null);
+      const noExiste = await service.forgotPassword('nadie@crm.com');
+
+      mockUsersService.findByEmail.mockResolvedValueOnce(mockUser);
+      const existe = await service.forgotPassword('admin@crmcontable.com');
+
+      expect(noExiste).toEqual(existe);
+      expect(mockTokens.emitir).toHaveBeenCalledTimes(1);
+      expect(mockTokens.enviarEnSegundoPlano).toHaveBeenCalledWith(
+        'admin@crmcontable.com',
+        'Administrador',
+        'token-en-claro',
+        'RESET_PASSWORD',
+      );
+    });
+  });
+
+  describe('duracionEnSegundos', () => {
+    it.each([
+      ['15m', 900],
+      ['8h', 28800],
+      ['7d', 604800],
+      ['3600', 3600],
+      [undefined, 900],
+      ['raro', 900],
+    ])('%s → %d', (entrada, esperado) => {
+      expect(duracionEnSegundos(entrada as any)).toBe(esperado);
     });
   });
 });

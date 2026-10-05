@@ -24,4 +24,11 @@ export class Cliente {
 
   @Column({ name: 'dias_plazo', type: 'int', default: 0 })
   diasPlazo: number;
+
+  /** Impide nuevas ventas a crédito sin perder el cupo configurado (catálogo §25) */
+  @Column({ name: 'credito_bloqueado', default: false })
+  creditoBloqueado: boolean;
+
+  @Column({ name: 'motivo_bloqueo', type: 'text', nullable: true })
+  motivoBloqueo?: string | null;
 }

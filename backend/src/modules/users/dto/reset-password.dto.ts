@@ -1,9 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, MinLength } from 'class-validator';
+import { ContrasenaSegura } from '../../../common/validacion/contrasena';
 
 export class ResetPasswordDto {
-  @ApiProperty({ example: 'NuevaClave123*' })
-  @IsString({ message: 'La contraseña debe ser una cadena de texto' })
-  @MinLength(6, { message: 'La contraseña debe tener mínimo 6 caracteres' })
+  @ApiProperty({ example: 'NuevaClave123*', description: 'Mínimo 8 caracteres con letras y números' })
+  @ContrasenaSegura()
   password: string;
 }

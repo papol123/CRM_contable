@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import { Observable } from 'rxjs';
+import { MetricasService } from '../metricas/metricas.service';
 
 /**
  * Patrones de campos sensibles que no deben exponerse en los logs de desarrollo
@@ -27,7 +28,7 @@ const SENSITIVE_KEY_PATTERNS = [
   /cvv/i,
   /cvc/i,
   /credit[-_]?card/i,
-  /tarjeta[-_]?credito/i,
+  /tarjeta/i,
   /pin/i,
 ];
 
@@ -95,6 +96,10 @@ export class RouteParamsInterceptor implements NestInterceptor {
 @Injectable()
 export class HttpLoggerMiddleware implements NestMiddleware {
   private readonly logger = new Logger('HTTP');
+  // En producción el body no se escribe en los logs (datos personales y comerciales)
+  private readonly registrarBody = process.env.NODE_ENV !== 'production';
+
+  constructor(private readonly metricas: MetricasService) {}
 
   use(req: Request, res: Response, next: NextFunction): void {
     const startTime = Date.now();
@@ -115,6 +120,10 @@ export class HttpLoggerMiddleware implements NestMiddleware {
     res.on('finish', () => {
       const duration = Date.now() - startTime;
       const { statusCode } = res;
+
+      // Se agrupa por la plantilla de la ruta (/clientes/:id) para no crear una métrica por id
+      const plantilla = req.route?.path ? `${req.baseUrl || ''}${req.route.path}` : 'sin-ruta';
+      this.metricas.registrar(method, plantilla, statusCode, duration);
 
       // Parámetros de ruta y query
       const routeParams = (req as any)._routeParams || req.params || {};
@@ -144,7 +153,7 @@ export class HttpLoggerMiddleware implements NestMiddleware {
       }
 
       // Body recibido
-      if (hasBody) {
+      if (hasBody && this.registrarBody) {
         lines.push(`   └─ Body: ${JSON.stringify(sanitizeData(body))}`);
       }
 

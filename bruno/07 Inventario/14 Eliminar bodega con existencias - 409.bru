@@ -1,0 +1,21 @@
+meta {
+  name: Eliminar bodega con existencias - 409
+  type: http
+  seq: 14
+}
+
+delete {
+  url: {{baseUrl}}/bodegas/{{idBodega}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+tests {
+  test("responde 409", function () {
+    expect(res.getStatus()).to.equal(409);
+  });
+}

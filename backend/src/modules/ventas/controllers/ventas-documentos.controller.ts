@@ -6,46 +6,46 @@ import {
   Body,
   Param,
   Query,
-  UseGuards,
   HttpCode,
   HttpStatus,
   ParseUUIDPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
-import { FacturasVentaService } from '../facturas-venta.service';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiProduces } from '@nestjs/swagger';
 import { CotizacionesService } from '../cotizaciones.service';
 import { PedidosService } from '../pedidos.service';
-import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
-import { PermissionsGuard } from '../../auth/guards/permissions.guard';
+import { ConsecutivosService } from '../consecutivos.service';
 import { RequirePermission } from '../../auth/decorators/permissions.decorator';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
+import { Actor } from '../../auth/decorators/actor.decorator';
+import { Auditar } from '../../auditoria/auditar';
+import { Idempotente } from '../../../common/idempotencia/idempotencia';
+import { archivo } from '../../../common/archivos/respuesta-archivo';
 import {
+  AjustarConsecutivoDto,
+  ConsultaCotizacionesDto,
+  ConsultaPedidosDto,
   CreateCotizacionDto,
   UpdateCotizacionDto,
   RechazarCotizacionDto,
   ConvertirCotizacionDto,
+  EnviarCotizacionDto,
   CreatePedidoDto,
   UpdateEstadoPedidoDto,
   FacturarPedidoDto,
   AnularPedidoDto,
-  CreateResolucionDianDto,
-  UpdateResolucionDianDto,
 } from '../dto/ventas-documentos.dto';
 
 @ApiTags('Cotizaciones')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('cotizaciones')
 export class CotizacionesController {
   constructor(private readonly cotizacionesService: CotizacionesService) {}
 
   @Get()
   @RequirePermission('ventas.consultar')
-  @ApiOperation({ summary: 'Listar cotizaciones' })
-  @ApiQuery({ name: 'estado', required: false, enum: ['BORRADOR', 'APROBADA', 'RECHAZADA', 'CONVERTIDA'] })
-  @ApiQuery({ name: 'clienteId', required: false })
-  async findAll(@Query('estado') estado?: string, @Query('clienteId') clienteId?: string) {
-    return this.cotizacionesService.findAll(estado, clienteId);
+  @ApiOperation({ summary: 'Listar cotizaciones (paginado, filtra por estado y cliente)' })
+  async findAll(@Query() filtros: ConsultaCotizacionesDto) {
+    return this.cotizacionesService.findAll(filtros);
   }
 
   @Get(':id')
@@ -57,10 +57,11 @@ export class CotizacionesController {
 
   @Get(':id/pdf')
   @RequirePermission('ventas.consultar')
-  @ApiOperation({ summary: 'PDF de cotización (pendiente: responde 501)' })
-  @ApiResponse({ status: 501, description: 'Generación de PDF no implementada' })
+  @ApiProduces('application/pdf')
+  @ApiOperation({ summary: 'Descargar la cotización en PDF' })
   async getPdf(@Param('id', ParseUUIDPipe) id: string) {
-    return this.cotizacionesService.getPdf(id);
+    const { contenido, nombre } = await this.cotizacionesService.generarPdf(id);
+    return archivo(contenido, nombre, 'application/pdf');
   }
 
   @Post()
@@ -73,7 +74,8 @@ export class CotizacionesController {
 
   @Patch(':id')
   @RequirePermission('ventas.crear')
-  @ApiOperation({ summary: 'Editar cotización (solo en BORRADOR)' })
+  @ApiOperation({ summary: 'Editar cotización (solo en BORRADOR; una aprobada no se edita)' })
+  @ApiResponse({ status: 409, description: 'La cotización no está en BORRADOR' })
   async update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateCotizacionDto) {
     return this.cotizacionesService.update(id, dto);
   }
@@ -81,14 +83,29 @@ export class CotizacionesController {
   @Post(':id/aprobar')
   @HttpCode(HttpStatus.OK)
   @RequirePermission('ventas.crear')
+  @Auditar({ accion: 'APROBAR', recurso: 'cotizaciones' })
   @ApiOperation({ summary: 'Aprobar cotización' })
   async aprobar(@Param('id', ParseUUIDPipe) id: string) {
     return this.cotizacionesService.aprobar(id);
   }
 
+  @Post(':id/enviar')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @RequirePermission('ventas.crear')
+  @ApiOperation({
+    summary: 'Generar el PDF, guardarlo y enviarlo por correo al cliente (asíncrono)',
+    description: 'Responde 202 con el job. Consulte el avance en GET /reportes/jobs/{jobId}.',
+  })
+  @ApiResponse({ status: 202, description: 'Envío encolado' })
+  @ApiResponse({ status: 422, description: 'Cliente sin correo o correo no configurado' })
+  async enviar(@Param('id', ParseUUIDPipe) id: string, @Body() dto: EnviarCotizacionDto, @CurrentUser('id') idUsuario: string) {
+    return this.cotizacionesService.enviarPdf(id, dto.email, idUsuario);
+  }
+
   @Post(':id/rechazar')
   @HttpCode(HttpStatus.OK)
   @RequirePermission('ventas.crear')
+  @Auditar({ accion: 'RECHAZAR', recurso: 'cotizaciones' })
   @ApiOperation({ summary: 'Rechazar cotización con motivo' })
   async rechazar(@Param('id', ParseUUIDPipe) id: string, @Body() dto: RechazarCotizacionDto) {
     return this.cotizacionesService.rechazar(id, dto.motivo);
@@ -97,6 +114,7 @@ export class CotizacionesController {
   @Post(':id/convertir-pedido')
   @HttpCode(HttpStatus.CREATED)
   @RequirePermission('ventas.crear')
+  @Auditar({ accion: 'CONVERTIR_PEDIDO', recurso: 'cotizaciones' })
   @ApiOperation({ summary: 'Convertir cotización en pedido (reserva stock)' })
   @ApiResponse({ status: 409, description: 'Estado no válido, vencida, sin items o sin stock' })
   async convertir(
@@ -110,18 +128,15 @@ export class CotizacionesController {
 
 @ApiTags('Pedidos')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('pedidos')
 export class PedidosController {
   constructor(private readonly pedidosService: PedidosService) {}
 
   @Get()
   @RequirePermission('ventas.consultar')
-  @ApiOperation({ summary: 'Listar pedidos' })
-  @ApiQuery({ name: 'estado', required: false })
-  @ApiQuery({ name: 'clienteId', required: false })
-  async findAll(@Query('estado') estado?: string, @Query('clienteId') clienteId?: string) {
-    return this.pedidosService.findAll(estado, clienteId);
+  @ApiOperation({ summary: 'Listar pedidos (paginado, filtra por estado y cliente)' })
+  async findAll(@Query() filtros: ConsultaPedidosDto) {
+    return this.pedidosService.findAll(filtros);
   }
 
   @Get(':id')
@@ -162,68 +177,42 @@ export class PedidosController {
   @Post(':id/facturar')
   @HttpCode(HttpStatus.CREATED)
   @RequirePermission('ventas.crear')
-  @ApiOperation({ summary: 'Generar la factura de venta del pedido' })
-  async facturar(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: FacturarPedidoDto,
-    @CurrentUser('id') idUsuario: string,
-  ) {
-    return this.pedidosService.facturar(id, dto, idUsuario);
+  @Idempotente()
+  @ApiOperation({ summary: 'Generar la remisión del pedido (transaccional e idempotente)' })
+  async facturar(@Param('id', ParseUUIDPipe) id: string, @Body() dto: FacturarPedidoDto, @Actor() actor: Actor) {
+    return this.pedidosService.facturar(id, dto, actor);
   }
 
   @Post(':id/anular')
   @HttpCode(HttpStatus.OK)
   @RequirePermission('ventas.anular')
-  @ApiOperation({ summary: 'Anular pedido y liberar la reserva (solo Administrador)' })
-  async anular(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: AnularPedidoDto,
-    @CurrentUser('id') idUsuario: string,
-  ) {
-    return this.pedidosService.anular(id, dto?.motivo, idUsuario);
+  @ApiOperation({ summary: 'Anular pedido con motivo y liberar la reserva de stock' })
+  async anular(@Param('id', ParseUUIDPipe) id: string, @Body() dto: AnularPedidoDto, @Actor() actor: Actor) {
+    return this.pedidosService.anular(id, dto.motivo, actor);
   }
 }
 
-@ApiTags('Resoluciones y Consecutivos')
+/** Numeración interna de documentos. No hay resoluciones DIAN (fuera de alcance). */
+@ApiTags('Consecutivos')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, PermissionsGuard)
-@Controller()
-export class ResolucionesController {
-  constructor(private readonly facturasService: FacturasVentaService) {}
+@RequirePermission('consecutivos.gestionar')
+@Controller('consecutivos')
+export class ConsecutivosController {
+  constructor(private readonly consecutivos: ConsecutivosService) {}
 
-  @Get('resoluciones')
-  @RequirePermission('configuracion.gestionar')
-  @ApiOperation({ summary: 'Listar resoluciones DIAN registradas' })
-  async getResoluciones() {
-    return this.facturasService.getResoluciones();
-  }
-
-  @Get('resoluciones/activa')
-  @RequirePermission('configuracion.gestionar')
-  @ApiOperation({ summary: 'Resolución DIAN vigente' })
-  async getResolucionActiva() {
-    return this.facturasService.getResolucionActiva();
-  }
-
-  @Post('resoluciones')
-  @HttpCode(HttpStatus.CREATED)
-  @RequirePermission('configuracion.gestionar')
-  @ApiOperation({ summary: 'Registrar nueva resolución DIAN' })
-  async createResolucion(@Body() dto: CreateResolucionDianDto) {
-    return this.facturasService.createResolucion(dto);
-  }
-
-  @Patch('resoluciones/:id')
-  @RequirePermission('configuracion.gestionar')
-  @ApiOperation({ summary: 'Actualizar resolución DIAN' })
-  async updateResolucion(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateResolucionDianDto) {
-    return this.facturasService.updateResolucion(id, dto);
-  }
-
-  @Get('consecutivos')
-  @RequirePermission('configuracion.gestionar')
-  @ApiOperation({ summary: 'Estado actual de los consecutivos de documentos' })
+  @Get()
+  @ApiOperation({ summary: 'Estado de los consecutivos (remisiones, conteos, cotizaciones, pedidos)' })
   async getConsecutivos() {
-    return this.facturasService.getConsecutivos();
+    return this.consecutivos.listar();
+  }
+
+  @Patch(':tipo')
+  @ApiOperation({
+    summary: 'Ajustar prefijo o siguiente número (siempre auditado)',
+    description: 'Tipos: REMISION, CONTEO, COTIZACION, PEDIDO. No se permite retroceder por debajo de un número ya emitido.',
+  })
+  @ApiResponse({ status: 409, description: 'El siguiente número no es mayor que el último emitido' })
+  async updateConsecutivo(@Param('tipo') tipo: string, @Body() dto: AjustarConsecutivoDto, @Actor() actor: Actor) {
+    return this.consecutivos.ajustar(tipo, dto, actor);
   }
 }

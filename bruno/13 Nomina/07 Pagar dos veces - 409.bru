@@ -1,0 +1,25 @@
+meta {
+  name: Pagar dos veces - 409
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/nomina/{{idNomina}}/pagar
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+body:json {
+  {}
+}
+
+tests {
+  test("responde 409", function () {
+    expect(res.getStatus()).to.equal(409);
+  });
+}

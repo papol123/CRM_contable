@@ -1,0 +1,41 @@
+meta {
+  name: Stock insuficiente - 409
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/facturas-venta
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+body:json {
+  {
+    "idCliente": "{{idCliente}}",
+    "idBodega": "{{idBodega}}",
+    "fechaVencimiento": "{{hoy}}",
+    "items": [
+      {
+        "idProducto": "{{idProducto}}",
+        "cantidad": 9999999,
+        "valorUnitario": 1
+      }
+    ]
+  }
+}
+
+tests {
+  test("responde 409", function () {
+    expect(res.getStatus()).to.equal(409);
+  });
+  test("error en formato RFC 9457 (application/problem+json)", function () {
+    expect(res.getHeader("content-type")).to.contain("application/problem+json");
+    expect(res.getBody()).to.have.property("type");
+    expect(res.getBody()).to.have.property("instance");
+  });
+}

@@ -7,9 +7,13 @@ import {
   IsString,
   IsUUID,
   IsDateString,
+  IsBoolean,
+  Max,
   MaxLength,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { PaginacionDto } from '../../../common/paginacion/paginacion';
 
 export class CreatePagoDto {
   @ApiPropertyOptional({
@@ -40,9 +44,10 @@ export class CreatePagoDto {
   @IsIn(['factura de venta', 'factura de compra'])
   tipoPago: 'factura de venta' | 'factura de compra';
 
-  @ApiProperty({ example: 1250000.0, description: 'Monto pagado o abonado (no puede superar el saldo de la factura)' })
-  @IsNumber()
+  @ApiProperty({ example: 1250000.0, description: 'Monto pagado o abonado (no puede superar el saldo del documento)' })
+  @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive({ message: 'El monto debe ser mayor que cero' })
+  @Max(9999999999999)
   monto: number;
 
   @ApiPropertyOptional({ example: '2026-03-27' })
@@ -58,7 +63,53 @@ export class CreatePagoDto {
   @ApiPropertyOptional({ example: 'Transferencia Bancolombia ref. 998877' })
   @IsOptional()
   @IsString()
+  @MaxLength(1000)
   observaciones?: string;
+}
+
+export class ConsultaPagosDto extends PaginacionDto {
+  @ApiPropertyOptional({ enum: ['factura de venta', 'factura de compra'] })
+  @IsOptional()
+  @IsIn(['factura de venta', 'factura de compra'])
+  tipoPago?: 'factura de venta' | 'factura de compra';
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  idTercero?: string;
+
+  @ApiPropertyOptional({ example: '2026-09-01' })
+  @IsOptional()
+  @IsDateString()
+  desde?: string;
+
+  @ApiPropertyOptional({ example: '2026-09-30' })
+  @IsOptional()
+  @IsDateString()
+  hasta?: string;
+}
+
+export class ConsultaGastosDto extends PaginacionDto {
+  @ApiPropertyOptional({ example: '2026-09-01' })
+  @IsOptional()
+  @IsDateString()
+  desde?: string;
+
+  @ApiPropertyOptional({ example: '2026-09-30' })
+  @IsOptional()
+  @IsDateString()
+  hasta?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  categoriaId?: string;
+
+  @ApiPropertyOptional({ type: Boolean })
+  @IsOptional()
+  @Transform(({ value }) => (value === 'true' ? true : value === 'false' ? false : value))
+  @IsBoolean()
+  incluirAnulados?: boolean;
 }
 
 export class CreateGastoDto {
@@ -79,8 +130,9 @@ export class CreateGastoDto {
   descripcion: string;
 
   @ApiProperty({ example: 450000.0 })
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive({ message: 'El monto debe ser mayor que cero' })
+  @Max(9999999999999)
   monto: number;
 
   @ApiPropertyOptional({ example: '2026-03-27' })
@@ -88,10 +140,6 @@ export class CreateGastoDto {
   @IsDateString()
   fecha?: string;
 
-  @ApiPropertyOptional({ example: 'https://storage.crmcontable.com/soportes/gasto_102.pdf' })
-  @IsOptional()
-  @IsString()
-  soporteUrl?: string;
 }
 
 export class UpdateGastoDto {
@@ -103,8 +151,9 @@ export class UpdateGastoDto {
 
   @ApiPropertyOptional({ example: 470000.0 })
   @IsOptional()
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive({ message: 'El monto debe ser mayor que cero' })
+  @Max(9999999999999)
   monto?: number;
 
   @ApiPropertyOptional()
@@ -122,8 +171,4 @@ export class UpdateGastoDto {
   @IsDateString()
   fecha?: string;
 
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  soporteUrl?: string;
 }

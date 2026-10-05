@@ -1,0 +1,33 @@
+meta {
+  name: Gasto con fecha en periodo cerrado - 422
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/gastos
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+body:json {
+  {
+    "idCategoriaGasto": "{{idCategoriaGasto}}",
+    "descripcion": "Gasto retroactivo",
+    "monto": 10000,
+    "fecha": "{{mesCerrado}}-10"
+  }
+}
+
+tests {
+  test("responde 422", function () {
+    expect(res.getStatus()).to.equal(422);
+  });
+  test("tipo periodo-cerrado", function () {
+    expect(res.getBody().type).to.match(/periodo-cerrado$/);
+  });
+}

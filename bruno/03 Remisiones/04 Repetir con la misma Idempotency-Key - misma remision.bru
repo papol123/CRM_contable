@@ -1,0 +1,50 @@
+meta {
+  name: Repetir con la misma Idempotency-Key - misma remision
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/facturas-venta
+  body: json
+  auth: bearer
+}
+
+headers {
+  Idempotency-Key: {{claveIdem}}
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+body:json {
+  {
+    "idCliente": "{{idCliente}}",
+    "idBodega": "{{idBodega}}",
+    "fechaVencimiento": "{{hoy}}",
+    "items": [
+      {
+        "idProducto": "{{idProducto}}",
+        "cantidad": 1,
+        "valorUnitario": 100000,
+        "pctDescuento": 10,
+        "pctIva": 19
+      }
+    ]
+  }
+}
+
+tests {
+  test("responde 201", function () {
+    expect(res.getStatus()).to.equal(201);
+  });
+  test("devuelve la misma remisión sin crear otra", function () {
+    expect(res.getBody().id).to.equal(bru.getEnvVar("idRemision"));
+    expect(res.getHeader("idempotent-replayed")).to.equal("true");
+  });
+}
+
+docs {
+  Debe ejecutarse justo después de "Crear remisión de contado": reutiliza la misma clave.
+}

@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
@@ -14,6 +15,7 @@ import {
 } from '../../database/entities/pedido.entity';
 import { Cliente } from '../../database/entities/cliente.entity';
 import {
+  ConsultaPedidosDto,
   CreatePedidoDto,
   UpdateEstadoPedidoDto,
   FacturarPedidoDto,
@@ -27,6 +29,9 @@ import {
 } from '../../common/inventario/stock';
 import { fechaHoy } from '../../common/utils/fechas';
 import { FacturasVentaService } from './facturas-venta.service';
+import { normalizarPaginacion, paginado } from '../../common/paginacion/paginacion';
+import { AuditoriaService } from '../auditoria/auditoria.service';
+import { Actor } from '../auth/decorators/actor.decorator';
 
 /** Único avance permitido desde cada estado con PATCH /pedidos/{id}/estado. */
 const SIGUIENTE_ESTADO: Partial<Record<EstadoPedido, EstadoPedido>> = {
@@ -52,9 +57,11 @@ export class PedidosService {
     @InjectRepository(Pedido)
     private readonly pedidoRepository: Repository<Pedido>,
     private readonly facturasService: FacturasVentaService,
+    private readonly auditoria: AuditoriaService,
   ) {}
 
-  async findAll(estado?: string, idCliente?: string): Promise<any[]> {
+  async findAll(filtros: ConsultaPedidosDto = {}) {
+    const pagina = normalizarPaginacion(filtros);
     const query = this.pedidoRepository
       .createQueryBuilder('p')
       .innerJoinAndSelect('p.cliente', 'c')
@@ -63,13 +70,15 @@ export class PedidosService {
       .leftJoinAndSelect('p.detalles', 'd')
       .leftJoinAndSelect('d.producto', 'prod')
       .orderBy('p.fecha', 'DESC')
-      .addOrderBy('p.numero', 'DESC');
+      .addOrderBy('p.numero', 'DESC')
+      .skip(pagina.offset)
+      .take(pagina.limit);
 
-    if (estado) query.andWhere('p.estado = :estado', { estado: estado.toUpperCase() });
-    if (idCliente) query.andWhere('p.idCliente = :idCliente', { idCliente });
+    if (filtros.estado) query.andWhere('p.estado = :estado', { estado: filtros.estado });
+    if (filtros.clienteId) query.andWhere('p.idCliente = :idCliente', { idCliente: filtros.clienteId });
 
-    const pedidos = await query.getMany();
-    return pedidos.map((p) => ({ ...p, ...calcularTotales(p.detalles) }));
+    const [pedidos, total] = await query.getManyAndCount();
+    return paginado(pedidos.map((p) => ({ ...p, ...calcularTotales(p.detalles) })), total, pagina);
   }
 
   async findById(id: string, manager: EntityManager = this.dataSource.manager): Promise<any> {
@@ -120,7 +129,7 @@ export class PedidosService {
     }
     const cliente = await manager.findOne(Cliente, { where: { id: datos.idCliente } });
     if (!cliente) throw new NotFoundException(`Cliente con ID ${datos.idCliente} no encontrado`);
-    if (!cliente.tercero?.activo) throw new BadRequestException('El cliente está inactivo');
+    if (!cliente.tercero?.activo) throw new UnprocessableEntityException('El cliente está inactivo');
 
     await bloquearInventario(manager);
     const idBodega = await resolverBodega(manager, datos.idBodega);
@@ -179,7 +188,9 @@ export class PedidosService {
     return this.findById(id);
   }
 
-  async facturar(id: string, dto: FacturarPedidoDto, idUsuario?: string): Promise<any> {
+  /** Genera la remisión del pedido; su reserva no cuenta contra el stock disponible. */
+  async facturar(id: string, dto: FacturarPedidoDto, actor?: Actor): Promise<any> {
+    const idUsuario = actor?.id;
     const idFactura = await this.dataSource.transaction(async (manager) => {
       const pedido = await this.obtenerParaCambio(manager, id);
 
@@ -190,7 +201,7 @@ export class PedidosService {
           idBodega: pedido.idBodega,
           fechaVencimiento: dto.fechaVencimiento,
           retefuente: dto.retefuente,
-          observaciones: `Factura del pedido ${pedido.numero}`,
+          observaciones: `Remisión del pedido ${pedido.numero}`,
           items: pedido.detalles.map((d) => ({
             idProducto: d.idProducto,
             cantidad: Number(d.cantidad),
@@ -204,17 +215,44 @@ export class PedidosService {
       );
 
       await manager.update(Pedido, id, { estado: 'FACTURADO', idFacturaVenta });
-      await this.registrarHistorial(manager, id, 'FACTURADO', idUsuario, 'Pedido facturado');
+      await this.registrarHistorial(manager, id, 'FACTURADO', idUsuario, 'Remisión generada');
+      await this.auditoria.registrar(
+        {
+          idUsuario,
+          accion: 'CREAR',
+          recurso: 'facturas_venta',
+          idRecurso: idFacturaVenta,
+          valorNuevo: { origen: 'pedido', pedido: pedido.numero, ...dto },
+          ip: actor?.ip,
+          userAgent: actor?.userAgent,
+        },
+        manager,
+      );
       return idFacturaVenta;
     });
     return this.facturasService.findFacturaById(idFactura);
   }
 
-  async anular(id: string, motivo: string | undefined, idUsuario?: string): Promise<any> {
+  /** Anula el pedido y libera la reserva de stock (las reservas se calculan por estado). */
+  async anular(id: string, motivo: string, actor?: Actor): Promise<any> {
     await this.dataSource.transaction(async (manager) => {
-      await this.obtenerParaCambio(manager, id);
+      const pedido = await this.obtenerParaCambio(manager, id);
       await manager.update(Pedido, id, { estado: 'ANULADO', motivoAnulacion: motivo });
-      await this.registrarHistorial(manager, id, 'ANULADO', idUsuario, motivo || 'Pedido anulado');
+      await this.registrarHistorial(manager, id, 'ANULADO', actor?.id, motivo);
+      await this.auditoria.registrar(
+        {
+          idUsuario: actor?.id,
+          accion: 'ANULAR',
+          recurso: 'pedidos',
+          idRecurso: id,
+          valorAnterior: { numero: pedido.numero, estado: pedido.estado },
+          valorNuevo: { estado: 'ANULADO', reservaLiberada: true },
+          motivo,
+          ip: actor?.ip,
+          userAgent: actor?.userAgent,
+        },
+        manager,
+      );
     });
     return this.findById(id);
   }

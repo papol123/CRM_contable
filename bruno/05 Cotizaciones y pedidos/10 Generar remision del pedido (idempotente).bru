@@ -1,0 +1,36 @@
+meta {
+  name: Generar remision del pedido (idempotente)
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/pedidos/{{idPedido}}/facturar
+  body: json
+  auth: bearer
+}
+
+headers {
+  Idempotency-Key: {{claveIdem}}
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+body:json {
+  {}
+}
+
+script:pre-request {
+  bru.setEnvVar("claveIdem", "bruno-" + Date.now() + "-" + Math.random().toString(16).slice(2));
+}
+
+tests {
+  test("responde 201", function () {
+    expect(res.getStatus()).to.equal(201);
+  });
+  test("crea una remisión REM", function () {
+    expect(res.getBody().numeroVenta).to.match(/^REM-/);
+  });
+}

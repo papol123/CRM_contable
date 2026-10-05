@@ -1,0 +1,21 @@
+meta {
+  name: Estado de consecutivos
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/consecutivos
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

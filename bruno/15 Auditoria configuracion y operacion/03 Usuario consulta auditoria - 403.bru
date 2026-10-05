@@ -1,0 +1,21 @@
+meta {
+  name: Usuario consulta auditoria - 403
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/auditoria
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+tests {
+  test("responde 403", function () {
+    expect(res.getStatus()).to.equal(403);
+  });
+}

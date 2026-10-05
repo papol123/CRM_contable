@@ -12,6 +12,7 @@ import { ProductosController } from './controllers/productos.controller';
 import { InventarioController } from './controllers/inventario.controller';
 import { ProductosService } from './productos.service';
 import { InventarioService } from './inventario.service';
+import { VentasModule } from '../ventas/ventas.module';
 
 @Module({
   imports: [
@@ -23,6 +24,8 @@ import { InventarioService } from './inventario.service';
       MovimientoInventario,
       Bodega,
     ]),
+    // ConsecutivosService numera los conteos de inventario
+    VentasModule,
   ],
   controllers: [ProductosController, InventarioController],
   providers: [ProductosService, InventarioService],

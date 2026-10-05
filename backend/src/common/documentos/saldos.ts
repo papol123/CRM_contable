@@ -25,11 +25,14 @@ export const SQL_PAGADO_FACTURA_VENTA = (alias: string) => `(
      AND ep.codigo <> 'ANULADO'
 )`;
 
+/** Total a pagar de una compra: líneas con descuento e IVA menos retenciones. Debe coincidir con calcularTotalesCompra. */
 export const SQL_TOTAL_FACTURA_COMPRA = (alias: string) => `(
-  SELECT COALESCE(ROUND(SUM(d.cantidad * d.costo_unitario
+  (SELECT COALESCE(ROUND(SUM(d.cantidad * d.costo_unitario
+            * (1 - COALESCE(d.pct_descuento, 0) / 100)
             * (1 + COALESCE(d.pct_iva, 0) / 100)), 2), 0)
-    FROM detalle_factura_compra d
-   WHERE d.id_factura_compra = ${alias}.id_factura_compra
+     FROM detalle_factura_compra d
+    WHERE d.id_factura_compra = ${alias}.id_factura_compra)
+  - COALESCE(${alias}.retefuente, 0) - COALESCE(${alias}.reteiva, 0) - COALESCE(${alias}.reteica, 0)
 )`;
 
 export const SQL_PAGADO_FACTURA_COMPRA = (alias: string) => `(
@@ -75,6 +78,8 @@ export interface SaldoFacturaCompra {
 
 export interface FiltrosSaldo {
   id?: string;
+  /** Varias facturas a la vez (p. ej. la página actual de un listado) */
+  ids?: string[];
   idTercero?: string;
   /** id_cliente o id_proveedor según el tipo de factura */
   idContraparte?: string;
@@ -105,6 +110,10 @@ export async function consultarSaldosVenta(
   if (filtros.id) {
     params.push(filtros.id);
     condiciones.push(`f.id_factura_venta = $${params.length}`);
+  }
+  if (filtros.ids) {
+    params.push(filtros.ids);
+    condiciones.push(`f.id_factura_venta = ANY($${params.length}::uuid[])`);
   }
   if (filtros.idContraparte) {
     params.push(filtros.idContraparte);
@@ -164,6 +173,10 @@ export async function consultarSaldosCompra(
   if (filtros.id) {
     params.push(filtros.id);
     condiciones.push(`fc.id_factura_compra = $${params.length}`);
+  }
+  if (filtros.ids) {
+    params.push(filtros.ids);
+    condiciones.push(`fc.id_factura_compra = ANY($${params.length}::uuid[])`);
   }
   if (filtros.idContraparte) {
     params.push(filtros.idContraparte);

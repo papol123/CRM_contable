@@ -6,49 +6,45 @@ import {
   Body,
   Param,
   Query,
-  UseGuards,
   HttpCode,
   HttpStatus,
   ParseUUIDPipe,
-  ParseBoolPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiProduces } from '@nestjs/swagger';
 import { FacturasVentaService } from '../facturas-venta.service';
-import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
-import { PermissionsGuard } from '../../auth/guards/permissions.guard';
 import { RequirePermission } from '../../auth/decorators/permissions.decorator';
-import { CurrentUser } from '../../auth/decorators/current-user.decorator';
+import { Actor } from '../../auth/decorators/actor.decorator';
+import { Auditar } from '../../auditoria/auditar';
+import { Idempotente } from '../../../common/idempotencia/idempotencia';
+import { archivo } from '../../../common/archivos/respuesta-archivo';
 import {
   CreateFacturaVentaDto,
   CalcularFacturaDto,
+  ConsultaRemisionesDto,
   UpdateFacturaVentaDto,
   AnularDocumentoDto,
 } from '../dto/factura-venta.dto';
 
-@ApiTags('Facturas de Venta')
+/**
+ * Ventas por REMISIÓN. Se conserva la ruta /facturas-venta del catálogo;
+ * no hay facturación electrónica DIAN.
+ */
+@ApiTags('Ventas (remisiones)')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('facturas-venta')
 export class FacturasVentaController {
   constructor(private readonly facturasService: FacturasVentaService) {}
 
   @Get()
   @RequirePermission('ventas.consultar')
-  @ApiOperation({ summary: 'Listar facturas de venta con filtros (incluye saldo)' })
-  @ApiQuery({ name: 'search', required: false })
-  @ApiQuery({ name: 'clienteId', required: false })
-  @ApiQuery({ name: 'anulada', required: false, type: Boolean })
-  async findAll(
-    @Query('search') search?: string,
-    @Query('clienteId') clienteId?: string,
-    @Query('anulada', new ParseBoolPipe({ optional: true })) anulada?: boolean,
-  ) {
-    return this.facturasService.findAllFacturas(search, clienteId, anulada);
+  @ApiOperation({ summary: 'Listar remisiones (paginado; filtra por texto, cliente, estado y fechas; incluye saldo)' })
+  async findAll(@Query() filtros: ConsultaRemisionesDto) {
+    return this.facturasService.findAllFacturas(filtros);
   }
 
   @Get('siguiente-consecutivo')
   @RequirePermission('ventas.crear')
-  @ApiOperation({ summary: 'Consultar próximo número de factura disponible' })
+  @ApiOperation({ summary: 'Próximo número de remisión (no lo reserva)' })
   async getSiguienteConsecutivo() {
     return this.facturasService.getSiguienteConsecutivo();
   }
@@ -56,41 +52,48 @@ export class FacturasVentaController {
   @Post('calcular')
   @HttpCode(HttpStatus.OK)
   @RequirePermission('ventas.crear')
-  @ApiOperation({ summary: 'Simular totales, descuentos, IVA y retenciones sin persistir' })
+  @ApiOperation({ summary: 'Simular totales, descuentos, IVA y retenciones sin guardar' })
   calcularTotales(@Body() dto: CalcularFacturaDto) {
     return this.facturasService.calcular(dto);
   }
 
   @Get(':id')
   @RequirePermission('ventas.consultar')
-  @ApiOperation({ summary: 'Detalle de la factura con pagos aplicados y saldo' })
+  @ApiOperation({ summary: 'Detalle de la remisión con pagos aplicados y saldo' })
+  @ApiResponse({ status: 404, description: 'Remisión no encontrada' })
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.facturasService.findFacturaById(id);
   }
 
   @Get(':id/pdf')
   @RequirePermission('ventas.consultar')
-  @ApiOperation({ summary: 'PDF de la factura (pendiente: responde 501)' })
-  @ApiResponse({ status: 501, description: 'Generación de PDF no implementada' })
+  @ApiProduces('application/pdf')
+  @ApiOperation({ summary: 'Descargar la remisión en PDF' })
   async getPdf(@Param('id', ParseUUIDPipe) id: string) {
-    return this.facturasService.getFacturaPdf(id);
+    const { contenido, nombre } = await this.facturasService.getFacturaPdf(id);
+    return archivo(contenido, nombre, 'application/pdf');
   }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @RequirePermission('ventas.crear')
+  @Idempotente()
   @ApiOperation({
-    summary: 'Crear factura de venta transaccional',
+    summary: 'Crear remisión (transaccional e idempotente)',
     description:
-      'Valida stock disponible y cupo de crédito, aplica el consecutivo DIAN, descarga el kardex a costo promedio y genera la cuenta por cobrar.',
+      'En una transacción: valida stock, periodo abierto, cupo y bloqueo de crédito; toma el consecutivo REM; ' +
+      'calcula IVA y descuentos por línea; descarga el kardex a costo promedio y deja la cuenta por cobrar si es a crédito. ' +
+      'Envíe Idempotency-Key para que un reintento no duplique la venta.',
   })
-  @ApiResponse({ status: 409, description: 'Stock insuficiente, cupo insuficiente o sin resolución vigente' })
-  async create(@Body() dto: CreateFacturaVentaDto, @CurrentUser('id') idUsuario: string) {
-    return this.facturasService.createFactura(dto, idUsuario);
+  @ApiResponse({ status: 409, description: 'Stock insuficiente' })
+  @ApiResponse({ status: 422, description: 'Cupo insuficiente, crédito bloqueado, cliente inactivo o periodo cerrado' })
+  async create(@Body() dto: CreateFacturaVentaDto, @Actor() actor: Actor) {
+    return this.facturasService.createFactura(dto, actor);
   }
 
   @Patch(':id')
   @RequirePermission('ventas.crear')
+  @Auditar({ accion: 'ACTUALIZAR', recurso: 'facturas_venta', registrarCuerpo: true })
   @ApiOperation({ summary: 'Modificar campos no financieros (vencimiento, observaciones)' })
   async update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateFacturaVentaDto) {
     return this.facturasService.updateFactura(id, dto);
@@ -99,13 +102,10 @@ export class FacturasVentaController {
   @Post(':id/anular')
   @HttpCode(HttpStatus.OK)
   @RequirePermission('ventas.anular')
-  @ApiOperation({ summary: 'Anular factura y devolver el stock a su bodega (solo Administrador)' })
+  @ApiOperation({ summary: 'Anular remisión con motivo: devuelve el stock con movimientos compensatorios' })
   @ApiResponse({ status: 409, description: 'Ya anulada, castigada o con pagos aplicados' })
-  async anular(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: AnularDocumentoDto,
-    @CurrentUser('id') idUsuario: string,
-  ) {
-    return this.facturasService.anularFactura(id, dto.motivo, idUsuario);
+  @ApiResponse({ status: 422, description: 'Periodo contable cerrado' })
+  async anular(@Param('id', ParseUUIDPipe) id: string, @Body() dto: AnularDocumentoDto, @Actor() actor: Actor) {
+    return this.facturasService.anularFactura(id, dto.motivo, actor);
   }
 }
