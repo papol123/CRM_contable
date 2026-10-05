@@ -1,0 +1,58 @@
+meta {
+  name: Crear remision de contado (idempotente)
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/facturas-venta
+  body: json
+  auth: bearer
+}
+
+headers {
+  Idempotency-Key: {{claveIdem}}
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+body:json {
+  {
+    "idCliente": "{{idCliente}}",
+    "idBodega": "{{idBodega}}",
+    "fechaVencimiento": "{{hoy}}",
+    "items": [
+      {
+        "idProducto": "{{idProducto}}",
+        "cantidad": 1,
+        "valorUnitario": 100000,
+        "pctDescuento": 10,
+        "pctIva": 19
+      }
+    ]
+  }
+}
+
+script:pre-request {
+  // Fecha de hoy en Colombia (en UTC, después de las 7 p. m. ya sería mañana)
+  // Colombia es UTC-5 todo el año (sin horario de verano)
+  bru.setEnvVar("hoy", new Date(Date.now() - 5 * 3600 * 1000).toISOString().slice(0, 10));
+  bru.setEnvVar("claveIdem", "bruno-" + Date.now() + "-" + Math.random().toString(16).slice(2));
+}
+
+script:post-response {
+  bru.setEnvVar("idRemision", res.getBody().id);
+}
+
+tests {
+  test("responde 201", function () {
+    expect(res.getStatus()).to.equal(201);
+  });
+  test("numero REM y total 107100", function () {
+    expect(res.getBody().numeroVenta).to.match(/^REM-\d{6}$/);
+    expect(res.getBody().total).to.equal(107100);
+    expect(res.getBody().estadoDian).to.equal("NO_APLICA");
+  });
+}

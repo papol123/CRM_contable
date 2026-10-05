@@ -1,0 +1,37 @@
+meta {
+  name: Calcular con novedades
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/nomina/{{idNomina}}/calcular
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+body:json {
+  {
+    "novedades": [
+      {
+        "idEmpleado": "{{idEmpleado}}",
+        "diasTrabajados": 15,
+        "horasExtras": 100000
+      }
+    ]
+  }
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("15 días + horas extras", function () {
+    const d = res.getBody().detalles.find((x) => x.idEmpleado === bru.getEnvVar("idEmpleado"));
+    expect(d.netoPagar).to.equal(846810);
+  });
+}

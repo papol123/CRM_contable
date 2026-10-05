@@ -1,0 +1,30 @@
+meta {
+  name: Bloquear credito
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/clientes/{{idCliente}}/bloquear-credito
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+body:json {
+  {
+    "motivo": "Mora mayor a 90 días (prueba Bruno)"
+  }
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("crédito bloqueado", function () {
+    expect(res.getBody().creditoBloqueado).to.equal(true);
+  });
+}

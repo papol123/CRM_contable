@@ -1,0 +1,27 @@
+meta {
+  name: Editar cotizacion aprobada - 409
+  type: http
+  seq: 5
+}
+
+patch {
+  url: {{baseUrl}}/cotizaciones/{{idCotizacion}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+body:json {
+  {
+    "observacion": "cambio"
+  }
+}
+
+tests {
+  test("responde 409", function () {
+    expect(res.getStatus()).to.equal(409);
+  });
+}

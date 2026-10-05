@@ -1,0 +1,21 @@
+meta {
+  name: Rentabilidad (Administrador)
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/reportes/rentabilidad
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

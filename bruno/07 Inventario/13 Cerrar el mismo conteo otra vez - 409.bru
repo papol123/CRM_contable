@@ -1,0 +1,33 @@
+meta {
+  name: Cerrar el mismo conteo otra vez - 409
+  type: http
+  seq: 13
+}
+
+post {
+  url: {{baseUrl}}/inventario/conteos/{{idConteo}}/cerrar
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+body:json {
+  {
+    "motivo": "Conteo de prueba Bruno",
+    "conteosFisicos": [
+      {
+        "idProducto": "{{idProductoConteo}}",
+        "stockFisico": 1
+      }
+    ]
+  }
+}
+
+tests {
+  test("responde 409", function () {
+    expect(res.getStatus()).to.equal(409);
+  });
+}

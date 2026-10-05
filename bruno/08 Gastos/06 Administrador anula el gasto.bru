@@ -1,0 +1,27 @@
+meta {
+  name: Administrador anula el gasto
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/gastos/{{idGasto}}/anular
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+body:json {
+  {
+    "motivo": "Prueba Bruno"
+  }
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

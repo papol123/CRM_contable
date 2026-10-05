@@ -1,0 +1,32 @@
+meta {
+  name: Login Vendedor (otro Usuario)
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/auth/login
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "vendedor@crmcontable.com",
+    "password": "{{claveSemilla}}"
+  }
+}
+
+script:post-response {
+  bru.setEnvVar("tokenVendedor", res.getBody().accessToken);
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("entrega accessToken y permisos", function () {
+    expect(res.getBody().accessToken).to.be.a("string");
+    expect(res.getBody().user.permisos).to.be.an("array");
+  });
+}

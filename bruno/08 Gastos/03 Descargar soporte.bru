@@ -1,0 +1,21 @@
+meta {
+  name: Descargar soporte
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/gastos/{{idGasto}}/soporte
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

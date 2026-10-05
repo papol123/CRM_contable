@@ -3,95 +3,106 @@ import {
   Get,
   Post,
   Patch,
-  Delete,
   Body,
   Param,
   Query,
-  UseGuards,
   HttpCode,
   HttpStatus,
   ParseUUIDPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { UsersService } from '../users.service';
 import { CreateUserDto } from '../dto/create-user.dto';
-import { UpdateUserDto } from '../dto/update-user.dto';
-import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
-import { PermissionsGuard } from '../../auth/guards/permissions.guard';
+import { ConsultaUsuariosDto, UpdateUserDto } from '../dto/update-user.dto';
+import { ResetPasswordDto } from '../dto/reset-password.dto';
 import { RequirePermission } from '../../auth/decorators/permissions.decorator';
+import { Auditar } from '../../auditoria/auditar';
+import { Actor } from '../../auth/decorators/actor.decorator';
+import { PaginacionDto } from '../../../common/paginacion/paginacion';
 
 @ApiTags('Usuarios')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, PermissionsGuard)
-@Controller('users')
+@RequirePermission('usuarios.gestionar')
+@Controller('usuarios')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
-  @Get('roles')
-  @RequirePermission('usuarios.gestionar')
-  @ApiOperation({ summary: 'Listar roles del sistema con sus permisos asociados' })
-  @ApiResponse({ status: 200, description: 'Lista de roles obtenida exitosamente' })
-  @ApiResponse({ status: 401, description: 'No autenticado' })
-  @ApiResponse({ status: 403, description: 'Permiso denegado' })
-  async getRoles() {
-    return this.usersService.findAllRoles();
-  }
-
   @Get()
-  @RequirePermission('usuarios.gestionar')
-  @ApiOperation({ summary: 'Listar todos los usuarios con filtros opcionales' })
-  @ApiQuery({ name: 'search', required: false, description: 'Término de búsqueda por nombre o correo' })
-  @ApiQuery({ name: 'idRol', required: false, description: 'Filtrar por UUID de rol' })
-  @ApiResponse({ status: 200, description: 'Lista de usuarios' })
-  @ApiResponse({ status: 401, description: 'No autenticado' })
-  @ApiResponse({ status: 403, description: 'Permiso denegado: requiere usuarios.gestionar' })
-  async findAll(
-    @Query('search') search?: string,
-    @Query('idRol') idRol?: string,
-  ) {
-    return this.usersService.findAll(search, idRol);
+  @ApiOperation({ summary: 'Listar usuarios (paginado, filtra por texto y rol)' })
+  @ApiResponse({ status: 403, description: 'Requiere usuarios.gestionar' })
+  async findAll(@Query() filtros: ConsultaUsuariosDto) {
+    return this.usersService.findAll(filtros);
   }
 
   @Get(':id')
-  @RequirePermission('usuarios.gestionar')
-  @ApiOperation({ summary: 'Consultar usuario por ID' })
-  @ApiResponse({ status: 200, description: 'Detalle del usuario' })
+  @ApiOperation({ summary: 'Detalle del usuario con su rol y permisos' })
   @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
-  async findOne(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string) {
+  async findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.usersService.findById(id);
+  }
+
+  @Get(':id/sesiones')
+  @ApiOperation({ summary: 'Sesiones activas (refresh tokens vigentes) del usuario' })
+  async sesiones(@Param('id', ParseUUIDPipe) id: string) {
+    return this.usersService.findSesiones(id);
   }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @RequirePermission('usuarios.gestionar')
-  @ApiOperation({ summary: 'Crear nuevo usuario' })
-  @ApiResponse({ status: 201, description: 'Usuario creado exitosamente' })
-  @ApiResponse({ status: 400, description: 'Datos de validación inválidos o rol inexistente' })
+  @ApiOperation({
+    summary: 'Crear usuario',
+    description: 'Sin contraseña, se envía al correo una invitación de un solo uso (72 h) para que el usuario la defina.',
+  })
+  @ApiResponse({ status: 201, description: 'Usuario creado' })
   @ApiResponse({ status: 409, description: 'El correo electrónico ya existe' })
-  async create(@Body() createUserDto: CreateUserDto) {
-    return this.usersService.create(createUserDto);
+  async create(@Body() dto: CreateUserDto, @Actor() actor: Actor) {
+    return this.usersService.create(dto, actor);
   }
 
   @Patch(':id')
-  @RequirePermission('usuarios.gestionar')
-  @ApiOperation({ summary: 'Actualizar datos de un usuario' })
-  @ApiResponse({ status: 200, description: 'Usuario actualizado exitosamente' })
-  @ApiResponse({ status: 400, description: 'Datos de validación inválidos' })
+  @ApiOperation({ summary: 'Actualizar datos o cambiar el rol de un usuario' })
   @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
   @ApiResponse({ status: 409, description: 'El correo electrónico ya está en uso' })
-  async update(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
-    @Body() updateUserDto: UpdateUserDto,
-  ) {
-    return this.usersService.update(id, updateUserDto);
+  @ApiResponse({ status: 422, description: 'Dejaría al sistema sin administradores activos' })
+  async update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateUserDto, @Actor() actor: Actor) {
+    return this.usersService.update(id, dto, actor);
   }
 
-  @Delete(':id')
-  @RequirePermission('usuarios.gestionar')
-  @ApiOperation({ summary: 'Desactivar usuario del sistema' })
-  @ApiResponse({ status: 200, description: 'Usuario desactivado exitosamente' })
-  @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
-  async remove(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string) {
-    return this.usersService.remove(id);
+  @Post(':id/activar')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Activar usuario' })
+  async activar(@Param('id', ParseUUIDPipe) id: string, @Actor() actor: Actor) {
+    return this.usersService.setActivo(id, true, actor);
+  }
+
+  @Post(':id/desactivar')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Desactivar usuario sin borrarlo (revoca sus sesiones y conserva su historial)' })
+  @ApiResponse({ status: 400, description: 'No puede desactivarse a sí mismo' })
+  @ApiResponse({ status: 422, description: 'Es el último administrador activo' })
+  async desactivar(@Param('id', ParseUUIDPipe) id: string, @Actor() actor: Actor) {
+    return this.usersService.setActivo(id, false, actor);
+  }
+
+  @Post(':id/reset-password')
+  @HttpCode(HttpStatus.OK)
+  @Auditar({ accion: 'FORZAR_RESET_PASSWORD', recurso: 'usuarios' })
+  @ApiOperation({ summary: 'Asignar una nueva contraseña y cerrar las sesiones abiertas' })
+  async resetPassword(@Param('id', ParseUUIDPipe) id: string, @Body() dto: ResetPasswordDto) {
+    return this.usersService.resetPassword(id, dto.password);
+  }
+
+  @Post(':id/cerrar-sesiones')
+  @HttpCode(HttpStatus.OK)
+  @Auditar({ accion: 'CERRAR_SESIONES', recurso: 'usuarios' })
+  @ApiOperation({ summary: 'Revocar todas las sesiones del usuario' })
+  async cerrarSesiones(@Param('id', ParseUUIDPipe) id: string) {
+    return this.usersService.cerrarSesiones(id);
+  }
+
+  @Get(':id/actividad')
+  @ApiOperation({ summary: 'Actividad reciente del usuario en la bitácora' })
+  async actividad(@Param('id', ParseUUIDPipe) id: string, @Query() p: PaginacionDto) {
+    return this.usersService.findUserActivity(id, p);
   }
 }

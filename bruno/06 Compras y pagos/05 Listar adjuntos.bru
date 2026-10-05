@@ -1,0 +1,25 @@
+meta {
+  name: Listar adjuntos
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/facturas-compra/{{idCompra}}/adjuntos
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+script:post-response {
+  if (res.getBody()[0]) bru.setEnvVar("idAdjunto", res.getBody()[0].id);
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

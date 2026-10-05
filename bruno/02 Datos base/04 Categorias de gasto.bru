@@ -1,0 +1,25 @@
+meta {
+  name: Categorias de gasto
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/categorias-gasto
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+script:post-response {
+  bru.setEnvVar("idCategoriaGasto", res.getBody()[0].id);
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

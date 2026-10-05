@@ -1,0 +1,21 @@
+meta {
+  name: Desactivar al otro administrador
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/usuarios/{{idGerencia}}/desactivar
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

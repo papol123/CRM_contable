@@ -1,0 +1,21 @@
+meta {
+  name: Aprobar cotizacion
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/cotizaciones/{{idCotizacion}}/aprobar
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

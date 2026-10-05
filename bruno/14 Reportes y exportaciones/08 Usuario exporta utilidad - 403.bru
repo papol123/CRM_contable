@@ -1,0 +1,27 @@
+meta {
+  name: Usuario exporta utilidad - 403
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/reportes/exportar
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+body:json {
+  {
+    "tipo": "utilidad"
+  }
+}
+
+tests {
+  test("responde 403", function () {
+    expect(res.getStatus()).to.equal(403);
+  });
+}

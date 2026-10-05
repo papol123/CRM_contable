@@ -1,0 +1,21 @@
+meta {
+  name: Metricas
+  type: http
+  seq: 11
+}
+
+get {
+  url: {{baseUrl}}/admin/metricas
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

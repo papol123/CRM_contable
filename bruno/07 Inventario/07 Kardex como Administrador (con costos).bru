@@ -1,0 +1,24 @@
+meta {
+  name: Kardex como Administrador (con costos)
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/inventario/{{idProducto}}/kardex
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("incluye costos", function () {
+    expect(res.getBody().movimientos[0]).to.have.property("costoUnitario");
+  });
+}

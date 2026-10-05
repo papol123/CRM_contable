@@ -1,0 +1,24 @@
+meta {
+  name: Compra queda con saldo cero
+  type: http
+  seq: 12
+}
+
+get {
+  url: {{baseUrl}}/facturas-compra/{{idCompra}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("saldo 0", function () {
+    expect(res.getBody().saldo).to.equal(0);
+  });
+}

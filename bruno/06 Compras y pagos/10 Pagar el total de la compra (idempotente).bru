@@ -1,0 +1,42 @@
+meta {
+  name: Pagar el total de la compra (idempotente)
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/pagos
+  body: json
+  auth: bearer
+}
+
+headers {
+  Idempotency-Key: {{claveIdem}}
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+body:json {
+  {
+    "tipoPago": "factura de compra",
+    "idFactura": "{{idCompra}}",
+    "idMetodoPago": "{{idMetodoPago}}",
+    "monto": {{totalCompra}}
+  }
+}
+
+script:pre-request {
+  bru.setEnvVar("claveIdem", "bruno-" + Date.now() + "-" + Math.random().toString(16).slice(2));
+}
+
+script:post-response {
+  bru.setEnvVar("idPago", res.getBody().id);
+}
+
+tests {
+  test("responde 201", function () {
+    expect(res.getStatus()).to.equal(201);
+  });
+}

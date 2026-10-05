@@ -1,35 +1,48 @@
 import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
+import { AUTENTICADO_KEY, PERMISSIONS_KEY } from '../decorators/permissions.decorator';
+import { AuditoriaService } from '../../auditoria/auditoria.service';
+import { contextoSolicitud } from '../../auditoria/auditar';
 
+/**
+ * Guard global de autorización por permisos (GEMINI.md §5.1 y §5.3).
+ * Se ejecuta después de JwtAuthGuard; el usuario trae sus permisos efectivos
+ * recargados desde base de datos en cada solicitud (JwtStrategy).
+ */
 @Injectable()
 export class PermissionsGuard implements CanActivate {
-  constructor(private reflector: Reflector) {}
+  constructor(
+    private reflector: Reflector,
+    private readonly auditoria: AuditoriaService,
+  ) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const requiredPermissions = this.reflector.getAllAndOverride<string[]>(
-      PERMISSIONS_KEY,
-      [context.getHandler(), context.getClass()],
-    );
+    // @Autenticado() en el método libera esa ruta del permiso declarado en el controlador
+    if (this.reflector.get<boolean>(AUTENTICADO_KEY, context.getHandler())) {
+      return true;
+    }
+    const requiredPermissions = this.reflector.getAllAndOverride<string[]>(PERMISSIONS_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
 
     if (!requiredPermissions || requiredPermissions.length === 0) {
       return true;
     }
 
-    const { user } = context.switchToHttp().getRequest();
+    const request = context.switchToHttp().getRequest();
+    const permisos: string[] = request.user?.permisos || [];
+    const faltantes = requiredPermissions.filter((p) => !permisos.includes(p));
 
-    if (!user || !user.permisos) {
-      throw new ForbiddenException('No tiene permisos para realizar esta acción');
-    }
-
-    const hasPermission = requiredPermissions.every((permission) =>
-      user.permisos.includes(permission),
-    );
-
-    if (!hasPermission) {
-      throw new ForbiddenException(
-        `Permiso denegado: Se requiere uno de los siguientes permisos: ${requiredPermissions.join(', ')}`,
-      );
+    if (faltantes.length > 0) {
+      void this.auditoria.registrar({
+        ...contextoSolicitud(request),
+        accion: 'ACCESO_DENEGADO',
+        recurso: 'auth',
+        valorNuevo: { metodo: request.method, ruta: request.originalUrl, permisosFaltantes: faltantes },
+        resultado: 'FALLO',
+      });
+      throw new ForbiddenException(`Permiso denegado: se requiere ${faltantes.join(', ')}`);
     }
 
     return true;

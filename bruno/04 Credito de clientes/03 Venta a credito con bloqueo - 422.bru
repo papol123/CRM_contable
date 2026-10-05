@@ -1,0 +1,41 @@
+meta {
+  name: Venta a credito con bloqueo - 422
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/facturas-venta
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+body:json {
+  {
+    "idCliente": "{{idCliente}}",
+    "idBodega": "{{idBodega}}",
+    "fechaVencimiento": "2099-12-31",
+    "items": [
+      {
+        "idProducto": "{{idProducto}}",
+        "cantidad": 1,
+        "valorUnitario": 100000,
+        "pctDescuento": 10,
+        "pctIva": 19
+      }
+    ]
+  }
+}
+
+tests {
+  test("responde 422", function () {
+    expect(res.getStatus()).to.equal(422);
+  });
+  test("tipo credito-bloqueado", function () {
+    expect(res.getBody().type).to.match(/credito-bloqueado$/);
+  });
+}

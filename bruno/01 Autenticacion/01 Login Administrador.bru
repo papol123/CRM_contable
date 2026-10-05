@@ -1,0 +1,32 @@
+meta {
+  name: Login Administrador
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/auth/login
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "admin@crmcontable.com",
+    "password": "{{claveSemilla}}"
+  }
+}
+
+script:post-response {
+  bru.setEnvVar("tokenAdmin", res.getBody().accessToken);
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("entrega accessToken y permisos", function () {
+    expect(res.getBody().accessToken).to.be.a("string");
+    expect(res.getBody().user.permisos).to.be.an("array");
+  });
+}

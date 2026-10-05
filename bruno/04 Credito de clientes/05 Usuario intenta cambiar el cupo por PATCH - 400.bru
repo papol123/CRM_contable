@@ -1,0 +1,27 @@
+meta {
+  name: Usuario intenta cambiar el cupo por PATCH - 400
+  type: http
+  seq: 5
+}
+
+patch {
+  url: {{baseUrl}}/clientes/{{idCliente}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+body:json {
+  {
+    "cupoCredito": 1
+  }
+}
+
+tests {
+  test("responde 400", function () {
+    expect(res.getStatus()).to.equal(400);
+  });
+}

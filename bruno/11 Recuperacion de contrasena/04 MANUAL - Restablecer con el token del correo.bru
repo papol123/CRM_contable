@@ -1,0 +1,28 @@
+meta {
+  name: MANUAL - Restablecer con el token del correo
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/auth/reset-password
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "token": "{{tokenRecuperacion}}",
+    "newPassword": "Admin123*Nueva"
+  }
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}
+
+docs {
+  Manual: copie el token del enlace que llega al correo de caja@crmcontable.com (con CORREO_MODO=log aparece en la consola del backend) en la variable tokenRecuperacion del entorno. Cambia la contraseña de caja@crmcontable.com.
+}

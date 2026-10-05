@@ -1,0 +1,21 @@
+meta {
+  name: Saldo del producto por bodega
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/inventario/{{idProducto}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

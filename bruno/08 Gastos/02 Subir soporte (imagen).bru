@@ -1,0 +1,25 @@
+meta {
+  name: Subir soporte (imagen)
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/gastos/{{idGasto}}/soporte
+  body: multipartForm
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+body:multipart-form {
+  archivo: @file(archivos/recibo.jpg)
+}
+
+tests {
+  test("responde 201", function () {
+    expect(res.getStatus()).to.equal(201);
+  });
+}

@@ -1,0 +1,34 @@
+meta {
+  name: Convertir en pedido (reserva stock)
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/cotizaciones/{{idCotizacion}}/convertir-pedido
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+body:json {
+  {
+    "idBodega": "{{idBodega}}"
+  }
+}
+
+script:post-response {
+  bru.setEnvVar("idPedido", res.getBody().pedido.id);
+}
+
+tests {
+  test("responde 201", function () {
+    expect(res.getStatus()).to.equal(201);
+  });
+  test("numero PED", function () {
+    expect(res.getBody().pedido.numero).to.match(/^PED-/);
+  });
+}

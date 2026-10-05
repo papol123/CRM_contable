@@ -1,0 +1,35 @@
+meta {
+  name: Traslado entre bodegas
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/inventario/traslados
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+body:json {
+  {
+    "idProducto": "{{idProducto}}",
+    "idBodegaOrigen": "{{idBodega}}",
+    "idBodegaDestino": "{{idBodega2}}",
+    "cantidad": 1,
+    "observacion": "Prueba Bruno: traslado"
+  }
+}
+
+tests {
+  test("responde 201 o 400", function () {
+    expect([201, 400]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  400 solo si la base tiene una única bodega activa (origen y destino iguales).
+}

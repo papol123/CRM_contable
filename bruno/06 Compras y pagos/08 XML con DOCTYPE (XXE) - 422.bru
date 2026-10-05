@@ -1,0 +1,25 @@
+meta {
+  name: XML con DOCTYPE (XXE) - 422
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/facturas-compra/importar-xml
+  body: multipartForm
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+body:multipart-form {
+  archivo: @file(archivos/xxe.xml)
+}
+
+tests {
+  test("responde 422", function () {
+    expect(res.getStatus()).to.equal(422);
+  });
+}

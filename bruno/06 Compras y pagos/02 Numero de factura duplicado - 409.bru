@@ -1,0 +1,45 @@
+meta {
+  name: Numero de factura duplicado - 409
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/facturas-compra
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+body:json {
+  {
+    "idProveedor": "{{idProveedor}}",
+    "numeroFactura": "{{numeroCompra}}",
+    "fechaEmision": "{{hoy}}",
+    "idBodega": "{{idBodega}}",
+    "pctRetefuente": 2.5,
+    "pctReteIva": 15,
+    "tarifaReteIcaPorMil": 9.66,
+    "items": [
+      {
+        "idProducto": "{{idProducto}}",
+        "cantidad": 1,
+        "costoUnitario": 1
+      }
+    ]
+  }
+}
+
+tests {
+  test("responde 409", function () {
+    expect(res.getStatus()).to.equal(409);
+  });
+  test("error en formato RFC 9457 (application/problem+json)", function () {
+    expect(res.getHeader("content-type")).to.contain("application/problem+json");
+    expect(res.getBody()).to.have.property("type");
+    expect(res.getBody()).to.have.property("instance");
+  });
+}

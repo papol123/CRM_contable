@@ -1,0 +1,31 @@
+meta {
+  name: Exportar ventas a CSV (asincrono)
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/reportes/exportar
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+body:json {
+  {
+    "tipo": "ventas"
+  }
+}
+
+script:post-response {
+  bru.setEnvVar("idJob", res.getBody().jobId);
+}
+
+tests {
+  test("responde 202", function () {
+    expect(res.getStatus()).to.equal(202);
+  });
+}

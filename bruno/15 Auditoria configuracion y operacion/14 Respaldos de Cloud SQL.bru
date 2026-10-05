@@ -1,0 +1,21 @@
+meta {
+  name: Respaldos de Cloud SQL
+  type: http
+  seq: 14
+}
+
+get {
+  url: {{baseUrl}}/admin/backups
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

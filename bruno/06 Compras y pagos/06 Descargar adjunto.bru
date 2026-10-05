@@ -1,0 +1,24 @@
+meta {
+  name: Descargar adjunto
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/facturas-compra/{{idCompra}}/adjuntos/{{idAdjunto}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("devuelve un PDF", function () {
+    expect(res.getHeader("content-type")).to.contain("application/pdf");
+  });
+}

@@ -1,0 +1,25 @@
+meta {
+  name: Estado de cuenta del cliente
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/clientes/{{idCliente}}/cartera
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+script:post-response {
+  bru.setEnvVar("cupoAntes", res.getBody().cupoCredito);
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

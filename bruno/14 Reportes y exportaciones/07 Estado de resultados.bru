@@ -1,0 +1,21 @@
+meta {
+  name: Estado de resultados
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/reportes/estado-resultados
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

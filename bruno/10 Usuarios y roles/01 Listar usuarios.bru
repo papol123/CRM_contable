@@ -1,0 +1,27 @@
+meta {
+  name: Listar usuarios
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/usuarios?limit=100
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+script:post-response {
+  const u = res.getBody().data;
+  bru.setEnvVar("idGerencia", u.find((x) => x.email === "gerencia@crmcontable.com").id);
+  bru.setEnvVar("idAdminPrincipal", u.find((x) => x.email === "admin@crmcontable.com").id);
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

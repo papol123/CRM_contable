@@ -1,0 +1,37 @@
+meta {
+  name: Crear usuario por invitacion (sin contrasena)
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/usuarios
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+body:json {
+  {
+    "email": "invitado.{{marca}}@example.com",
+    "nombres": "Invitado",
+    "apellidos": "Bruno",
+    "idRol": "{{idRolUsuario}}"
+  }
+}
+
+script:pre-request {
+  bru.setEnvVar("marca", Date.now());
+}
+
+tests {
+  test("responde 201", function () {
+    expect(res.getStatus()).to.equal(201);
+  });
+  test("envía invitación", function () {
+    expect(res.getBody().invitacionEnviada).to.equal(true);
+  });
+}

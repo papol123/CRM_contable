@@ -1,0 +1,27 @@
+meta {
+  name: Transicion de estado invalida - 409
+  type: http
+  seq: 7
+}
+
+patch {
+  url: {{baseUrl}}/pedidos/{{idPedido}}/estado
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+body:json {
+  {
+    "estado": "ENTREGADO"
+  }
+}
+
+tests {
+  test("responde 409", function () {
+    expect(res.getStatus()).to.equal(409);
+  });
+}

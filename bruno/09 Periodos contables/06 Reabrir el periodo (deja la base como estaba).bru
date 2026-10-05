@@ -1,0 +1,27 @@
+meta {
+  name: Reabrir el periodo (deja la base como estaba)
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/periodos-contables/{{idPeriodo}}/reabrir
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+body:json {
+  {
+    "motivo": "Fin de la prueba Bruno"
+  }
+}
+
+tests {
+  test("responde 200 o 409", function () {
+    expect([200, 409]).to.include(res.getStatus());
+  });
+}

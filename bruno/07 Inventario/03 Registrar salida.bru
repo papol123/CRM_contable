@@ -1,0 +1,30 @@
+meta {
+  name: Registrar salida
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/inventario/salidas
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+body:json {
+  {
+    "idProducto": "{{idProducto}}",
+    "idBodega": "{{idBodega}}",
+    "cantidad": 1,
+    "motivo": "Prueba Bruno: salida"
+  }
+}
+
+tests {
+  test("responde 201", function () {
+    expect(res.getStatus()).to.equal(201);
+  });
+}

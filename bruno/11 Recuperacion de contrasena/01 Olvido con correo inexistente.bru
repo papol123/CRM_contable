@@ -1,0 +1,27 @@
+meta {
+  name: Olvido con correo inexistente
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/auth/forgot-password
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "noexiste@crmcontable.com"
+  }
+}
+
+script:post-response {
+  bru.setEnvVar("mensajeOlvido", res.getBody().message);
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

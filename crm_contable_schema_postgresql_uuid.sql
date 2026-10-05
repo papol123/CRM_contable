@@ -2,6 +2,10 @@
 -- CRM CONTABLE - SCRIPT DE CREACIÓN DE ESQUEMA (PostgreSQL / Cloud SQL)
 -- Basado en ERD v2 (módulos: terceros, inventario, documentos)
 -- Versión con llaves primarias UUID. Crea las tablas en "public".
+--
+-- IMPORTANTE: después de este script se deben aplicar las migraciones de
+-- backend/database/migrations (cotizaciones, pedidos, marcas, columnas de
+-- anulación, permisos nuevos). `npm run db:migrate` hace ambas cosas.
 -- =====================================================================
 
 BEGIN;

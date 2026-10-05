@@ -1,0 +1,25 @@
+meta {
+  name: Anular sin motivo - 400
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{baseUrl}}/facturas-venta/{{idRemision}}/anular
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+body:json {
+  {}
+}
+
+tests {
+  test("responde 400", function () {
+    expect(res.getStatus()).to.equal(400);
+  });
+}

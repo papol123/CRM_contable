@@ -1,0 +1,25 @@
+meta {
+  name: Proveedores (paginado)
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/proveedores?limit=50
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+script:post-response {
+  bru.setEnvVar("idProveedor", res.getBody().data.find((x) => x.tercero.activo).id);
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

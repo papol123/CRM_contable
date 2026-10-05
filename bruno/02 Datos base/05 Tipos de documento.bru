@@ -1,0 +1,25 @@
+meta {
+  name: Tipos de documento
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/tipos-documento
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+script:post-response {
+  bru.setEnvVar("idTipoDocumento", res.getBody()[0].id);
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

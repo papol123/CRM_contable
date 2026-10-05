@@ -1,0 +1,25 @@
+meta {
+  name: Roles y permisos
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/roles
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+script:post-response {
+  bru.setEnvVar("idRolUsuario", res.getBody().find((r) => r.codigo === "USUARIO").id);
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

@@ -1,0 +1,34 @@
+meta {
+  name: Subir archivo con contenido falso - 415
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/facturas-compra/{{idCompra}}/adjuntos
+  body: multipartForm
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+body:multipart-form {
+  archivo: @file(archivos/no-es-pdf.pdf)
+}
+
+tests {
+  test("responde 415", function () {
+    expect(res.getStatus()).to.equal(415);
+  });
+  test("error en formato RFC 9457 (application/problem+json)", function () {
+    expect(res.getHeader("content-type")).to.contain("application/problem+json");
+    expect(res.getBody()).to.have.property("type");
+    expect(res.getBody()).to.have.property("instance");
+  });
+}
+
+docs {
+  El archivo tiene extensión .pdf pero no es un PDF: se valida la firma del contenido, no solo el tipo.
+}

@@ -1,0 +1,31 @@
+meta {
+  name: Ejecutar respaldo
+  type: http
+  seq: 15
+}
+
+post {
+  url: {{baseUrl}}/admin/backups
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+body:json {
+  {
+    "motivo": "Prueba Bruno"
+  }
+}
+
+tests {
+  test("responde 202 o 409 o 503", function () {
+    expect([202, 409, 503]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  202 si GCP_PROJECT_ID y CLOUD_SQL_INSTANCE están configurados; 503 si no; 409 si ya hay uno en curso. Crea un respaldo real de Cloud SQL.
+}

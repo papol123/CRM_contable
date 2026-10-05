@@ -1,0 +1,26 @@
+meta {
+  name: Bodegas
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/bodegas
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+script:post-response {
+  const b = res.getBody().filter((x) => x.activo);
+  bru.setEnvVar("idBodega2", (b[1] || b[0]).id);
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

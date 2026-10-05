@@ -1,0 +1,40 @@
+meta {
+  name: Simular totales (calcular)
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/facturas-venta/calcular
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+body:json {
+  {
+    "items": [
+      {
+        "idProducto": "{{idProducto}}",
+        "cantidad": 1,
+        "valorUnitario": 100000,
+        "pctDescuento": 10,
+        "pctIva": 19
+      }
+    ],
+    "porcentajeRetefuente": 2.5
+  }
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("100000 - 10% + 19% IVA", function () {
+    expect(res.getBody().subtotalNeto).to.equal(90000);
+    expect(res.getBody().totalIva).to.equal(17100);
+  });
+}

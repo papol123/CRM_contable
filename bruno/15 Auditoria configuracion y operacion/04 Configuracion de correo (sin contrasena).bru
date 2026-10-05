@@ -1,0 +1,24 @@
+meta {
+  name: Configuracion de correo (sin contrasena)
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/configuracion/correo
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("nunca devuelve la contraseña", function () {
+    expect(res.getBody()).to.not.have.property("password");
+  });
+}

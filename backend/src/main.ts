@@ -1,65 +1,37 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe, Logger } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { Logger } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import * as cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
+import { configurarAplicacion } from './app.setup';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
-  const app = await NestFactory.create(AppModule);
+  const app = configurarAplicacion(await NestFactory.create<NestExpressApplication>(AppModule));
 
-  // 1. Prefijo global de versión de API
-  app.setGlobalPrefix('api/v1');
-
-  // 2. Parser de Cookies para Refresh Tokens HttpOnly
-  app.use(cookieParser());
-
-  // 3. Habilitación de CORS para el Frontend (Next.js)
-  app.enableCors({
-    origin: (origin, callback) => {
-      // Permitir solicitudes sin origin (como herramientas internas o curl)
-      if (!origin) return callback(null, true);
-      // Permitir localhost o 127.0.0.1 en cualquier puerto local o FRONTEND_URL
-      const isAllowed =
-        origin.startsWith('http://localhost:') ||
-        origin.startsWith('http://127.0.0.1:') ||
-        origin === process.env.FRONTEND_URL;
-      if (isAllowed) {
-        callback(null, true);
-      } else {
-        callback(null, true); // En desarrollo permitir para evitar bloqueos
-      }
-    },
-    credentials: true,
-  });
-
-  // 4. Validación global de DTOs con class-validator
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      transform: true,
-      forbidNonWhitelisted: true,
-    }),
-  );
-
-  // 5. Documentación interactiva Swagger / OpenAPI
-  const config = new DocumentBuilder()
-    .setTitle('CRM Contable API')
-    .setDescription(
-      'API REST para CRM Contable de Repuestos Automotrices - Módulo de Autenticación y Autorización RBAC',
-    )
-    .setVersion('1.0')
-    .addBearerAuth()
-    .build();
-
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
+  // Documentación interactiva Swagger / OpenAPI (SWAGGER=false la desactiva)
+  if (process.env.SWAGGER !== 'false') {
+    const config = new DocumentBuilder()
+      .setTitle('CRM Contable — Repuestos Automotrices API')
+      .setDescription(
+        'Servicios REST del CRM/ERP contable de repuestos automotrices: autenticación y permisos granulares, usuarios, catálogos, ' +
+          'clientes y proveedores, productos e inventario (kardex), cotizaciones, pedidos, ventas por remisión, compras, pagos, ' +
+          'cartera, gastos, reportes, nómina, auditoría y operación. Los errores siguen RFC 9457 (application/problem+json). ' +
+          'Las operaciones de creación de remisiones, compras y pagos aceptan la cabecera Idempotency-Key.',
+      )
+      .setVersion('1.0')
+      .addBearerAuth()
+      .build();
+    SwaggerModule.setup('api/docs', app, SwaggerModule.createDocument(app, config));
+  }
 
   const port = process.env.PORT || 3000;
   await app.listen(port);
 
   logger.log(`🚀 Servidor ejecutándose en: http://localhost:${port}/api/v1`);
-  logger.log(`📖 Documentación Swagger disponible en: http://localhost:${port}/api/docs`);
+  if (process.env.SWAGGER !== 'false') {
+    logger.log(`📖 Documentación Swagger disponible en: http://localhost:${port}/api/docs`);
+  }
 }
 
 bootstrap();

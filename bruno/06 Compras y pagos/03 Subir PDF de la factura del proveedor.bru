@@ -1,0 +1,25 @@
+meta {
+  name: Subir PDF de la factura del proveedor
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/facturas-compra/{{idCompra}}/adjuntos
+  body: multipartForm
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+body:multipart-form {
+  archivo: @file(archivos/factura-prueba.pdf)
+}
+
+tests {
+  test("responde 201", function () {
+    expect(res.getStatus()).to.equal(201);
+  });
+}

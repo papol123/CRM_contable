@@ -1,0 +1,21 @@
+meta {
+  name: Bitacora de anulaciones
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/auditoria/anulaciones
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

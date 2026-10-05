@@ -1,0 +1,37 @@
+meta {
+  name: Saldos de inventario (elige producto y bodega con stock)
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/inventario?limit=100
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+script:post-response {
+  const fila = res.getBody().data.find((s) => s.disponible > 10);
+  if (fila) {
+    bru.setEnvVar("idProducto", fila.idProducto);
+    bru.setEnvVar("codigoProducto", fila.codigo);
+    bru.setEnvVar("idBodega", fila.idBodega);
+  }
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("hay un producto con más de 10 unidades disponibles", function () {
+    expect(res.getBody().data.some((s) => s.disponible > 10)).to.equal(true);
+  });
+}
+
+docs {
+  Guarda idProducto e idBodega de la primera fila con más de 10 unidades disponibles. Las demás pruebas usan esas variables.
+}

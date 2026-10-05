@@ -1,0 +1,25 @@
+meta {
+  name: Descargar el CSV
+  type: http
+  seq: 11
+}
+
+get {
+  url: {{baseUrl}}/reportes/jobs/{{idJob}}/descargar
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+tests {
+  test("responde 200 o 409", function () {
+    expect([200, 409]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  409 si la exportación todavía no termina; repita la consulta anterior.
+}

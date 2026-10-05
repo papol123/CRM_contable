@@ -1,0 +1,21 @@
+meta {
+  name: Datos de empresa (cualquier usuario)
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/configuracion/empresa
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

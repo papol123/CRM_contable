@@ -1,0 +1,55 @@
+vars {
+  baseUrl: https://crm-contable-api-916812392845.us-east1.run.app/api/v1
+  claveSemilla: Admin123*
+  tokenRecuperacion: pegue-aqui-el-token-del-correo
+  tokenAdmin: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI3NGI4ZDRmNi02MWJjLTQwNGUtODhjZi02Y2FiZWUwM2QzM2IiLCJlbWFpbCI6ImFkbWluQGNybWNvbnRhYmxlLmNvbSIsInJvbCI6IkFETUlOIiwicGVybWlzb3MiOlsidmVudGFzLmNvbnN1bHRhciIsInZlbnRhcy5jcmVhciIsInZlbnRhcy5hbnVsYXIiLCJjb21wcmFzLmNvbnN1bHRhciIsImNvbXByYXMuY3JlYXIiLCJjb21wcmFzLmFudWxhciIsImludmVudGFyaW8uY29uc3VsdGFyIiwiaW52ZW50YXJpby5hanVzdGFyIiwiaW52ZW50YXJpby5jb3N0b3MiLCJjYXJ0ZXJhLmNvbnN1bHRhciIsInBhZ29zLnJlZ2lzdHJhciIsInBhZ29zLmFudWxhciIsInRlcmNlcm9zLmNvbnN1bHRhciIsInRlcmNlcm9zLmNyZWFyIiwidGVyY2Vyb3MuZWRpdGFyIiwidXN1YXJpb3MuZ2VzdGlvbmFyIiwicm9sZXMuZ2VzdGlvbmFyIiwiYXVkaXRvcmlhLmNvbnN1bHRhciIsImNvbmZpZ3VyYWNpb24uZ2VzdGlvbmFyIiwiY2llcnJlcy5lamVjdXRhciIsInRlcmNlcm9zLmVsaW1pbmFyIiwiZ2FzdG9zLmNvbnN1bHRhcl90b2RvcyIsImVtcGxlYWRvcy5jb25zdWx0YXIiLCJlbXBsZWFkb3MuZ2VzdGlvbmFyIiwibm9taW5hLmNvbnN1bHRhciIsIm5vbWluYS5nZXN0aW9uYXIiLCJtYW50ZW5pbWllbnRvLmdlc3Rpb25hciIsImludmVudGFyaW8ubW92aW1pZW50b3MiLCJwcm9kdWN0b3MuY3JlYXIiLCJwcm9kdWN0b3MuZWRpdGFyIiwicHJvZHVjdG9zLnByZWNpb3MiLCJwcm9kdWN0b3MuZWxpbWluYXIiLCJwcm9kdWN0b3MuaW1wb3J0YXIiLCJ0ZXJjZXJvcy5pbXBvcnRhciIsImNhdGFsb2dvcy5nZXN0aW9uYXIiLCJjYXJ0ZXJhLmdlc3Rpb25hciIsImNvbnNlY3V0aXZvcy5nZXN0aW9uYXIiLCJyZXBvcnRlcy5maW5hbmNpZXJvcyIsInJlcG9ydGVzLmV4cG9ydGFyIiwiZ2FzdG9zLnJlZ2lzdHJhciIsImdhc3Rvcy5hbnVsYXIiXSwiaWF0IjoxNzkxMTc2MTMwLCJleHAiOjE3OTExNzcwMzB9.Z0YHNyzaFkD4K8Ct7QqKjcXfHW2H8e6ZFBjOKjgxCww
+  tokenUsuario: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI3ZGQzZDZjNC02MTczLTQ4MDEtYTA0ZC04ZmNhNDQyODVkOWUiLCJlbWFpbCI6InVzdWFyaW9AY3JtY29udGFibGUuY29tIiwicm9sIjoiVVNVQVJJTyIsInBlcm1pc29zIjpbInZlbnRhcy5jb25zdWx0YXIiLCJ2ZW50YXMuY3JlYXIiLCJjb21wcmFzLmNvbnN1bHRhciIsImNvbXByYXMuY3JlYXIiLCJpbnZlbnRhcmlvLmNvbnN1bHRhciIsImNhcnRlcmEuY29uc3VsdGFyIiwicGFnb3MucmVnaXN0cmFyIiwidGVyY2Vyb3MuY29uc3VsdGFyIiwidGVyY2Vyb3MuY3JlYXIiLCJ0ZXJjZXJvcy5lZGl0YXIiLCJpbnZlbnRhcmlvLm1vdmltaWVudG9zIiwicHJvZHVjdG9zLmNyZWFyIiwicHJvZHVjdG9zLmVkaXRhciIsInJlcG9ydGVzLmV4cG9ydGFyIiwiZ2FzdG9zLnJlZ2lzdHJhciJdLCJpYXQiOjE3OTExNzYxMzAsImV4cCI6MTc5MTE3NzAzMH0.0ieAYgrtg3U7SGnLldGQS1QlYXmWxErA3_sxXsmGmhk
+  tokenVendedor: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0MDE3ZTVjNC01MWMyLTQ3ZjAtYjUwNi1lYWQ3MDc5MDU0MjUiLCJlbWFpbCI6InZlbmRlZG9yQGNybWNvbnRhYmxlLmNvbSIsInJvbCI6IlVTVUFSSU8iLCJwZXJtaXNvcyI6WyJ2ZW50YXMuY29uc3VsdGFyIiwidmVudGFzLmNyZWFyIiwiY29tcHJhcy5jb25zdWx0YXIiLCJjb21wcmFzLmNyZWFyIiwiaW52ZW50YXJpby5jb25zdWx0YXIiLCJjYXJ0ZXJhLmNvbnN1bHRhciIsInBhZ29zLnJlZ2lzdHJhciIsInRlcmNlcm9zLmNvbnN1bHRhciIsInRlcmNlcm9zLmNyZWFyIiwidGVyY2Vyb3MuZWRpdGFyIiwiaW52ZW50YXJpby5tb3ZpbWllbnRvcyIsInByb2R1Y3Rvcy5jcmVhciIsInByb2R1Y3Rvcy5lZGl0YXIiLCJyZXBvcnRlcy5leHBvcnRhciIsImdhc3Rvcy5yZWdpc3RyYXIiXSwiaWF0IjoxNzkxMTc2MTMwLCJleHAiOjE3OTExNzcwMzB9.rEJFxLRBPJDnikoD1I_uoQXMpfS4Dbza1Ttdd1SdGhI
+  idBodega2: 2a18d153-4cd7-49c5-bdab-57ca095727e7
+  idProducto: 834e7f28-bf26-4b49-9601-c2a244db1edd
+  codigoProducto: REP-ACC-001
+  idBodega: d39d545a-072f-4730-8c89-59bb8325bf1d
+  idMetodoPago: 3d57b7f0-0a14-4688-ab64-9e96915a66cd
+  idCategoriaGasto: 8a868371-cba9-4335-b6e8-1ca50fc92f06
+  idTipoDocumento: 87c89c74-93e6-45ec-84f1-d22cd77dbe5a
+  idCliente: c0e5eb2d-42b7-40d1-a08b-71f49dc094cc
+  documentoCliente: 1056789012
+  idTipoDocCliente: 87c89c74-93e6-45ec-84f1-d22cd77dbe5a
+  idProveedor: 4f5ba4fd-7554-43d0-9107-d72b008c3e45
+  idConteo: 5db258f4-4602-4e4a-83c0-9ee6b697fa3f
+  idProductoConteo: 0797d029-cc9a-4717-8375-fe38338b7963
+  @number
+  fisicoConteo: 37
+  claveIdem: bruno-1791176190762-ed722a7991b728
+  idJob: 1f9826ed-c03b-4858-8d55-f5d2e5e238d7
+  @number
+  marca: 1791176252391
+  idRolUsuario: dcbb54ed-8b98-4517-938b-d96e7e8f0c60
+  mesActual: 2026-10
+  hoy: 2026-10-04
+  idRemision: 20bf055d-381d-4331-a676-3080df3c3c7a
+  @number
+  mesNomina: 8
+  @number
+  anioNomina: 2049
+  idNomina: 7cbee5da-3449-40e6-a26a-aee5c761cda9
+  idGasto: c4ce28d2-976c-4f92-993c-2073b71c1a3c
+  documentoEmpleado: 1176312188
+  idEmpleado: 5a90c3af-c1fb-45b7-891d-0978c036497a
+  numeroCompra: BRU-1791176189287
+  idCompra: 486c22c4-5728-4e11-9877-9c7c0374ac2d
+  @number
+  totalCompra: 101415.6
+  mensajeOlvido: Si el correo electrónico está registrado, recibirás un enlace para restablecer tu contraseña.
+  idGerencia: 1344071a-333d-49a1-8a28-19383333a60c
+  idAdminPrincipal: 74b8d4f6-61bc-404e-88cf-6cabee03d33b
+  @number
+  cupoAntes: 0
+  idCotizacion: 91bc88dc-ab20-47b2-be55-a3c8eac51256
+  mesCerrado: 2026-08
+  idJobCotizacion: 38265b2e-6357-434e-9ef8-a595c8230a61
+  idPedido: 9fdaf166-efbf-40a1-9042-de5cb9175625
+  idAdjunto: fabecc0c-1af7-4d82-ab34-c6452d490273
+  idPago: 7bfd9d14-ad02-48fb-a090-5b5732109250
+  idPeriodo: cd1fbea2-68f9-4ca0-850d-187bcd7d860f
+}

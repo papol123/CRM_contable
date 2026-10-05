@@ -1,0 +1,21 @@
+meta {
+  name: Resoluciones DIAN fuera de alcance - 404
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/resoluciones
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+tests {
+  test("responde 404", function () {
+    expect(res.getStatus()).to.equal(404);
+  });
+}

@@ -1,0 +1,24 @@
+meta {
+  name: Desprendibles PDF
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/nomina/{{idNomina}}/desprendibles
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("devuelve un PDF", function () {
+    expect(res.getHeader("content-type")).to.contain("application/pdf");
+  });
+}

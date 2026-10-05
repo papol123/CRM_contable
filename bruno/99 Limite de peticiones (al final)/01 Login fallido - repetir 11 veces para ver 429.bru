@@ -1,0 +1,28 @@
+meta {
+  name: Login fallido - repetir 11 veces para ver 429
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/auth/login
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "noexiste@crmcontable.com",
+    "password": "Mala12345"
+  }
+}
+
+tests {
+  test("responde 401 o 429", function () {
+    expect([401, 429]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  Envíela 11 veces seguidas: las 10 primeras dan 401 y la 11.ª da 429. Luego su IP queda bloqueada para login durante 1 minuto.
+}
