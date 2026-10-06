@@ -1,0 +1,24 @@
+meta {
+  name: Usuario ve productos del proveedor sin costos
+  type: http
+  seq: 21
+}
+
+get {
+  url: {{baseUrl}}/proveedores/{{idProveedor}}/productos
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("no incluye costoActual (costos: solo Administrador)", function () {
+    res.getBody().productosSuministrados.forEach((p) => expect(p).to.not.have.property("costoActual"));
+  });
+}

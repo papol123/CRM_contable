@@ -262,35 +262,30 @@ export class ClientesService {
   async findHistorialCompras(id: string, filtros: HistorialComprasDto = {}) {
     const cliente = await this.findById(id);
     const pagina = normalizarPaginacion(filtros);
-    const params: any[] = [id];
-    const condiciones = ['f.id_cliente = $1'];
-    if (filtros.desde) {
-      params.push(filtros.desde.slice(0, 10));
-      condiciones.push(`f.fecha_expedicion >= $${params.length}`);
-    }
-    if (filtros.hasta) {
-      params.push(filtros.hasta.slice(0, 10));
-      condiciones.push(`f.fecha_expedicion <= $${params.length}`);
-    }
-    const where = condiciones.join(' AND ');
+    const params = [id, filtros.desde?.slice(0, 10) ?? null, filtros.hasta?.slice(0, 10) ?? null];
 
     const [resumen] = await this.dataSource.query(
       `SELECT COUNT(*) FILTER (WHERE NOT f.anulada)::int AS remisiones,
               COUNT(*)::int AS total_filas,
-              COALESCE(SUM(${SQL_TOTAL_FACTURA_VENTA('f')}) FILTER (WHERE NOT f.anulada), 0) AS comprado
-         FROM facturas_venta f WHERE ${where}`,
+              COALESCE(SUM(${SQL_TOTAL_FACTURA_VENTA}) FILTER (WHERE NOT f.anulada), 0) AS comprado
+         FROM facturas_venta f
+        WHERE f.id_cliente = $1
+          AND ($2::date IS NULL OR f.fecha_expedicion >= $2::date)
+          AND ($3::date IS NULL OR f.fecha_expedicion <= $3::date)`,
       params,
     );
     const filas = await this.dataSource.query(
       `SELECT f.id_factura_venta AS "idFactura", f.numero_venta AS "numero",
               to_char(f.fecha_expedicion, 'YYYY-MM-DD') AS fecha, e.codigo AS estado, f.anulada,
-              ${SQL_TOTAL_FACTURA_VENTA('f')} AS total,
+              ${SQL_TOTAL_FACTURA_VENTA} AS total,
               (SELECT COUNT(*) FROM detalle_factura_venta d WHERE d.id_factura_venta = f.id_factura_venta) AS items
          FROM facturas_venta f
          JOIN estados_factura_venta e ON e.id_estado = f.id_estado
-        WHERE ${where}
+        WHERE f.id_cliente = $1
+          AND ($2::date IS NULL OR f.fecha_expedicion >= $2::date)
+          AND ($3::date IS NULL OR f.fecha_expedicion <= $3::date)
         ORDER BY f.fecha_expedicion DESC, f.numero_venta DESC
-        LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+        LIMIT $4 OFFSET $5`,
       [...params, pagina.limit, pagina.offset],
     );
 
@@ -323,7 +318,7 @@ export class ClientesService {
          JOIN estados_pago ep ON ep.id_estado = p.id_estado AND ep.codigo <> 'ANULADO'
          JOIN metodos_pago mp ON mp.id_metodo_pago = p.id_metodo_pago
          JOIN facturas_venta f ON f.id_factura_venta = a.id_factura_venta
-        WHERE f.id_cliente = $1 AND ${SQL_TOTAL_FACTURA_VENTA('f')} - ${SQL_PAGADO_FACTURA_VENTA('f')} > 0
+        WHERE f.id_cliente = $1 AND ${SQL_TOTAL_FACTURA_VENTA} - ${SQL_PAGADO_FACTURA_VENTA} > 0
         ORDER BY p.fecha_pago DESC`,
       [id],
     );

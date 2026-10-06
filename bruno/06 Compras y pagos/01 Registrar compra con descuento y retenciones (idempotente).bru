@@ -66,4 +66,10 @@ tests {
     expect(c.total).to.equal(101415.6);
     expect(c.saldo).to.equal(101415.6);
   });
+  test("guarda las tarifas aplicadas (NUMERIC(5,2))", function () {
+    const c = res.getBody();
+    expect(c.pctRetefuente).to.equal(2.5);
+    expect(c.pctReteIva).to.equal(15);
+    expect(c.tarifaReteIcaPorMil).to.equal(9.66);
+  });
 }

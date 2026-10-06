@@ -1,11 +1,11 @@
 meta {
-  name: Listar pagos (filtros y paginado)
+  name: Compra queda con saldo cero
   type: http
-  seq: 16
+  seq: 15
 }
 
 get {
-  url: {{baseUrl}}/pagos?limit=10&tipoPago=factura de compra
+  url: {{baseUrl}}/facturas-compra/{{idCompra}}
   body: none
   auth: bearer
 }
@@ -17,5 +17,8 @@ auth:bearer {
 tests {
   test("responde 200", function () {
     expect(res.getStatus()).to.equal(200);
+  });
+  test("saldo 0", function () {
+    expect(res.getBody().saldo).to.equal(0);
   });
 }

@@ -38,4 +38,8 @@ tests {
     expect(res.getBody()).to.have.property("type");
     expect(res.getBody()).to.have.property("instance");
   });
+  test("type y title específicos (GEMINI §6)", function () {
+    expect(res.getBody().type).to.match(/\/stock-insuficiente$/);
+    expect(res.getBody().title).to.equal("Stock insuficiente");
+  });
 }

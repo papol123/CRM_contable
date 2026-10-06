@@ -202,26 +202,19 @@ export class ProveedoresService {
   async findHistorialCompras(id: string, filtros: HistorialComprasDto = {}) {
     const proveedor = await this.findById(id);
     const pagina = normalizarPaginacion(filtros);
-    const params: any[] = [id];
-    const condiciones = ['fc.id_proveedor = $1'];
-    if (filtros.desde) {
-      params.push(filtros.desde.slice(0, 10));
-      condiciones.push(`fc.fecha_emision >= $${params.length}`);
-    }
-    if (filtros.hasta) {
-      params.push(filtros.hasta.slice(0, 10));
-      condiciones.push(`fc.fecha_emision <= $${params.length}`);
-    }
+    const params = [id, filtros.desde?.slice(0, 10) ?? null, filtros.hasta?.slice(0, 10) ?? null];
     const filas = await this.dataSource.query(
       `SELECT fc.id_factura_compra AS "idFacturaCompra", fc.numero_factura AS "numeroFactura",
               to_char(fc.fecha_emision, 'YYYY-MM-DD') AS "fechaEmision",
               to_char(fc.fecha_vencimiento, 'YYYY-MM-DD') AS "fechaVencimiento",
               e.codigo AS estado,
-              ${SQL_TOTAL_FACTURA_COMPRA('fc')} AS monto,
-              ${SQL_PAGADO_FACTURA_COMPRA('fc')} AS pagado
+              ${SQL_TOTAL_FACTURA_COMPRA} AS monto,
+              ${SQL_PAGADO_FACTURA_COMPRA} AS pagado
          FROM facturas_compra fc
          JOIN estados_factura_compra e ON e.id_estado = fc.id_estado
-        WHERE ${condiciones.join(' AND ')}
+        WHERE fc.id_proveedor = $1
+          AND ($2::date IS NULL OR fc.fecha_emision >= $2::date)
+          AND ($3::date IS NULL OR fc.fecha_emision <= $3::date)
         ORDER BY fc.fecha_emision DESC`,
       params,
     );
@@ -243,7 +236,7 @@ export class ProveedoresService {
     };
   }
 
-  async findProductos(id: string) {
+  async findProductos(id: string, verCostos = true) {
     const proveedor = await this.findById(id);
     const productos = await this.dataSource.query(
       `SELECT p.id_producto AS "idProducto", p.codigo, p.nombre,
@@ -258,10 +251,9 @@ export class ProveedoresService {
     return {
       proveedorId: proveedor.id,
       razonSocial: proveedor.tercero.razonSocial,
-      productosSuministrados: productos.map((p: any) => ({
-        ...p,
-        costoActual: p.costoActual === null ? null : Number(p.costoActual),
-      })),
+      productosSuministrados: productos.map(({ costoActual, ...p }: any) =>
+        verCostos ? { ...p, costoActual: costoActual === null ? null : Number(costoActual) } : p,
+      ),
     };
   }
 

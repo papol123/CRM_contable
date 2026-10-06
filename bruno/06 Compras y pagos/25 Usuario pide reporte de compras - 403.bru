@@ -1,0 +1,21 @@
+meta {
+  name: Usuario pide reporte de compras - 403
+  type: http
+  seq: 25
+}
+
+get {
+  url: {{baseUrl}}/reportes/compras
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+tests {
+  test("responde 403", function () {
+    expect(res.getStatus()).to.equal(403);
+  });
+}

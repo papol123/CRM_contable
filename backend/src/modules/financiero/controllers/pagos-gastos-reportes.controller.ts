@@ -50,24 +50,24 @@ export class PagosController {
 
   @Get()
   @RequirePermission('pagos.registrar')
-  @ApiOperation({ summary: 'Listar pagos y recaudos (paginado; filtra por tipo, tercero y fechas)' })
-  async findAll(@Query() filtros: ConsultaPagosDto) {
-    return this.pagosService.findAll(filtros);
+  @ApiOperation({ summary: 'Listar pagos y recaudos (paginado; filtra por tipo, tercero y fechas). Sin pagos.consultar_todos, solo los propios' })
+  async findAll(@Query() filtros: ConsultaPagosDto, @Actor() actor: Actor) {
+    return this.pagosService.findAll(filtros, actor);
   }
 
   @Get(':id')
   @RequirePermission('pagos.registrar')
   @ApiOperation({ summary: 'Detalle del pago con los documentos a los que se aplicó' })
-  async findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.pagosService.findById(id);
+  async findOne(@Param('id', ParseUUIDPipe) id: string, @Actor() actor: Actor) {
+    return this.pagosService.findById(id, actor);
   }
 
   @Get(':id/recibo')
   @RequirePermission('pagos.registrar')
   @ApiProduces('application/pdf')
   @ApiOperation({ summary: 'Recibo de caja (cliente) o comprobante de egreso (proveedor) en PDF' })
-  async getRecibo(@Param('id', ParseUUIDPipe) id: string) {
-    const { contenido, nombre } = await this.pagosService.getRecibo(id);
+  async getRecibo(@Param('id', ParseUUIDPipe) id: string, @Actor() actor: Actor) {
+    const { contenido, nombre } = await this.pagosService.getRecibo(id, actor);
     return archivo(contenido, nombre, 'application/pdf');
   }
 
@@ -247,7 +247,7 @@ export class ReportesController {
   }
 
   @Get('reportes/compras')
-  @RequirePermission('compras.consultar')
+  @RequirePermission('reportes.financieros')
   @ApiOperation({ summary: 'Compras con base, IVA, retenciones y total' })
   async getReporteCompras(@Query() q: RangoFechasDto) {
     return this.reportesService.getReporteCompras(q.desde, q.hasta);

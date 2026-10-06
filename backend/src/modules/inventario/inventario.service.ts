@@ -28,7 +28,7 @@ import {
   esEntrada,
   resolverBodega,
   saldoProducto,
-  sqlCantidadConSigno,
+  SQL_CANTIDAD_CON_SIGNO,
   validarDisponibilidad,
 } from '../../common/inventario/stock';
 import { redondear } from '../../common/documentos/totales';
@@ -69,12 +69,7 @@ export class InventarioService {
 
   /** Saldo, reservado y disponible por producto y bodega. */
   async getSaldos(bodegaId?: string, db: EntityManager = this.dataSource.manager): Promise<any[]> {
-    const params: any[] = [ESTADOS_PEDIDO_CON_RESERVA];
-    let filtro = '';
-    if (bodegaId) {
-      params.push(bodegaId);
-      filtro = 'WHERE m.id_bodega = $2';
-    }
+    const params = [ESTADOS_PEDIDO_CON_RESERVA, bodegaId ?? null];
 
     const filas = await db.query(
       `
@@ -83,11 +78,11 @@ export class InventarioService {
           SELECT p.id_producto AS "idProducto", p.codigo, p.nombre,
                  p.stock_minimo AS "stockMinimo",
                  b.id_bodega AS "idBodega", b.nombre AS "bodegaNombre", b.codigo AS "bodegaCodigo",
-                 SUM(${sqlCantidadConSigno('m')}) AS saldo
+                 SUM(${SQL_CANTIDAD_CON_SIGNO}) AS saldo
             FROM movimientos_inventario m
             JOIN productos p ON p.id_producto = m.id_producto
             JOIN bodegas b ON b.id_bodega = m.id_bodega
-            ${filtro}
+           WHERE ($2::uuid IS NULL OR m.id_bodega = $2::uuid)
            GROUP BY p.id_producto, p.codigo, p.nombre, p.stock_minimo, b.id_bodega, b.nombre, b.codigo
         ) s
         LEFT JOIN (
@@ -157,21 +152,16 @@ export class InventarioService {
     );
     if (!producto) throw new NotFoundException(`Producto con ID ${productoId} no encontrado`);
 
-    const params: any[] = [productoId];
-    let filtroBodega = '';
-    if (opciones.bodegaId) {
-      params.push(opciones.bodegaId);
-      filtroBodega = 'AND m.id_bodega = $2';
-    }
+    const params = [productoId, opciones.bodegaId ?? null];
     const filas = await this.dataSource.query(
       `SELECT m.id_movimiento AS "id", m.fecha, m.tipo_movimiento AS "tipo", m.cantidad,
               m.costo_unitario AS "costoUnitario", m.origen_tabla AS "origen", m.origen_id AS "origenId",
               m.motivo, b.codigo AS "bodega", NULLIF(TRIM(CONCAT(u.nombres, ' ', u.apellidos)), '') AS "usuario",
-              ${sqlCantidadConSigno('m')} AS "cantidadConSigno"
+              ${SQL_CANTIDAD_CON_SIGNO} AS "cantidadConSigno"
          FROM movimientos_inventario m
          JOIN bodegas b ON b.id_bodega = m.id_bodega
          LEFT JOIN usuarios u ON u.id_usuario = m.id_usuario
-        WHERE m.id_producto = $1 ${filtroBodega}
+        WHERE m.id_producto = $1 AND ($2::uuid IS NULL OR m.id_bodega = $2::uuid)
         ORDER BY m.fecha, m.id_movimiento`,
       params,
     );
@@ -238,14 +228,14 @@ export class InventarioService {
     const filas = await this.dataSource.query(
       `
       SELECT p.id_producto AS "idProducto", p.codigo, p.nombre,
-             SUM(${sqlCantidadConSigno('m')}) AS saldo,
+             SUM(${SQL_CANTIDAD_CON_SIGNO}) AS saldo,
              MAX(m.fecha) AS "ultimoMovimiento",
              EXTRACT(DAY FROM now() - MAX(m.fecha))::int AS "diasInactivo"
         FROM movimientos_inventario m
         JOIN productos p ON p.id_producto = m.id_producto
        GROUP BY p.id_producto, p.codigo, p.nombre
       HAVING MAX(m.fecha) < now() - make_interval(days => $1)
-         AND SUM(${sqlCantidadConSigno('m')}) > 0
+         AND SUM(${SQL_CANTIDAD_CON_SIGNO}) > 0
        ORDER BY MAX(m.fecha) ASC
       `,
       [dias],
@@ -488,9 +478,10 @@ export class InventarioService {
         // Reversar una entrada saca stock: debe existir
         const saldo = await saldoProducto(manager, mov.idProducto, mov.idBodega);
         if (saldo < Number(mov.cantidad)) {
-          throw new ConflictException(
-            `Stock insuficiente para reversar la entrada. Saldo actual: ${saldo}, cantidad: ${mov.cantidad}`,
-          );
+          throw new ConflictException({
+            message: `Stock insuficiente para reversar la entrada. Saldo actual: ${saldo}, cantidad: ${mov.cantidad}`,
+            tipo: 'stock-insuficiente',
+          });
         }
       }
 

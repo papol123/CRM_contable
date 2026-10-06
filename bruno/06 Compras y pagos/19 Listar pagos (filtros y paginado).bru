@@ -1,0 +1,21 @@
+meta {
+  name: Listar pagos (filtros y paginado)
+  type: http
+  seq: 19
+}
+
+get {
+  url: {{baseUrl}}/pagos?limit=10&tipoPago=factura de compra
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

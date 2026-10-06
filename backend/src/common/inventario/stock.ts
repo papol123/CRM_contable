@@ -14,10 +14,12 @@ export type TipoMovimiento = (typeof TIPOS_MOVIMIENTO)[number];
 /** Estados de pedido que mantienen stock reservado. */
 export const ESTADOS_PEDIDO_CON_RESERVA = ['RECIBIDO', 'EN_PROCESO', 'ENVIADO', 'ENTREGADO'];
 
-const LISTA_ENTRADAS = TIPOS_ENTRADA.map((t) => `'${t}'`).join(', ');
-
-export const sqlCantidadConSigno = (alias = 'm') =>
-  `CASE WHEN ${alias}.tipo_movimiento IN (${LISTA_ENTRADAS}) THEN ${alias}.cantidad ELSE -${alias}.cantidad END`;
+/**
+ * Cantidad con signo de un movimiento del kardex con alias `m` (entradas suman,
+ * salidas restan). Constante: GEMINI.md §4.5 no permite armar SQL con variables.
+ */
+export const SQL_CANTIDAD_CON_SIGNO =
+  `CASE WHEN m.tipo_movimiento IN ('ENTRADA', 'AJUSTE_ENTRADA', 'TRASLADO_ENTRADA') THEN m.cantidad ELSE -m.cantidad END`;
 
 export function esEntrada(tipo: string): boolean {
   return (TIPOS_ENTRADA as readonly string[]).includes(tipo);
@@ -36,17 +38,12 @@ export async function saldoProducto(
   idProducto: string,
   idBodega?: string,
 ): Promise<number> {
-  const params: any[] = [idProducto];
-  let filtroBodega = '';
-  if (idBodega) {
-    params.push(idBodega);
-    filtroBodega = 'AND m.id_bodega = $2';
-  }
   const [fila] = await db.query(
-    `SELECT COALESCE(SUM(${sqlCantidadConSigno('m')}), 0) AS saldo
+    `SELECT COALESCE(SUM(${SQL_CANTIDAD_CON_SIGNO}), 0) AS saldo
        FROM movimientos_inventario m
-      WHERE m.id_producto = $1 ${filtroBodega}`,
-    params,
+      WHERE m.id_producto = $1
+        AND ($2::uuid IS NULL OR m.id_bodega = $2::uuid)`,
+    [idProducto, idBodega ?? null],
   );
   return Number(fila?.saldo || 0);
 }
@@ -57,18 +54,13 @@ export async function reservadoProducto(
   idBodega: string,
   excluirPedidoId?: string,
 ): Promise<number> {
-  const params: any[] = [idProducto, idBodega, ESTADOS_PEDIDO_CON_RESERVA];
-  let exclusion = '';
-  if (excluirPedidoId) {
-    params.push(excluirPedidoId);
-    exclusion = 'AND p.id_pedido <> $4';
-  }
   const [fila] = await db.query(
     `SELECT COALESCE(SUM(d.cantidad), 0) AS reservado
        FROM detalle_pedido d
        JOIN pedidos p ON p.id_pedido = d.id_pedido
-      WHERE d.id_producto = $1 AND p.id_bodega = $2 AND p.estado = ANY($3) ${exclusion}`,
-    params,
+      WHERE d.id_producto = $1 AND p.id_bodega = $2 AND p.estado = ANY($3)
+        AND ($4::uuid IS NULL OR p.id_pedido <> $4::uuid)`,
+    [idProducto, idBodega, ESTADOS_PEDIDO_CON_RESERVA, excluirPedidoId ?? null],
   );
   return Number(fila?.reservado || 0);
 }
@@ -172,7 +164,8 @@ export async function validarDisponibilidad(
   const faltantes: string[] = [];
 
   for (const [idProducto, cantidad] of cantidades) {
-    const producto = encontrados.get(idProducto);
+    // Existe: los inexistentes ya se rechazaron arriba
+    const producto = encontrados.get(idProducto)!;
     if (!producto.maneja_inventario) continue;
     conInventario.add(idProducto);
 
@@ -189,7 +182,10 @@ export async function validarDisponibilidad(
   }
 
   if (faltantes.length > 0) {
-    throw new ConflictException(`Stock insuficiente en la bodega: ${faltantes.join('; ')}`);
+    throw new ConflictException({
+      message: `Stock insuficiente en la bodega: ${faltantes.join('; ')}`,
+      tipo: 'stock-insuficiente',
+    });
   }
 
   return conInventario;

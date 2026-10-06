@@ -1,0 +1,21 @@
+meta {
+  name: Otro Usuario pide el recibo ajeno - 404
+  type: http
+  seq: 13
+}
+
+get {
+  url: {{baseUrl}}/pagos/{{idPago}}/recibo
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenVendedor}}
+}
+
+tests {
+  test("responde 404", function () {
+    expect(res.getStatus()).to.equal(404);
+  });
+}

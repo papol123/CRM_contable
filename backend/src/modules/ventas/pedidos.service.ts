@@ -261,7 +261,7 @@ export class PedidosService {
   private async obtenerParaCambio(manager: EntityManager, id: string): Promise<Pedido> {
     const [fila] = await manager.query(`SELECT id_pedido FROM pedidos WHERE id_pedido = $1 FOR UPDATE`, [id]);
     if (!fila) throw new NotFoundException(`Pedido con ID ${id} no encontrado`);
-    const pedido = await manager.findOne(Pedido, { where: { id } });
+    const pedido = await manager.findOneOrFail(Pedido, { where: { id } });
     if (ESTADOS_FINALES.includes(pedido.estado)) {
       throw new ConflictException(`El pedido ${pedido.numero} ya está ${pedido.estado}`);
     }

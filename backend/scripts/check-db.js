@@ -7,17 +7,17 @@ async function main() {
     await client.connect();
     console.log('Conexión exitosa a PostgreSQL!');
 
+    // Consulta fija (GEMINI §4.5): filas vivas por tabla según las estadísticas de PostgreSQL
     const tablesRes = await client.query(`
-      SELECT table_name 
-      FROM information_schema.tables 
-      WHERE table_schema = 'public' 
-      ORDER BY table_name;
+      SELECT relname AS table_name, n_live_tup AS registros
+        FROM pg_stat_user_tables
+       WHERE schemaname = 'public'
+       ORDER BY relname
     `);
 
     console.log(`Tablas encontradas: ${tablesRes.rows.length}`);
     for (const row of tablesRes.rows) {
-      const countRes = await client.query(`SELECT COUNT(*) FROM "${row.table_name}"`);
-      console.log(`- ${row.table_name}: ${countRes.rows[0].count} registros`);
+      console.log(`- ${row.table_name}: ~${row.registros} registros`);
     }
 
     const usersRes = await client.query(`SELECT email, nombres, apellidos, id_rol FROM usuarios`);

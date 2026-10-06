@@ -4,7 +4,6 @@ import {
   Column,
   ManyToOne,
   JoinColumn,
-  PrimaryColumn,
 } from 'typeorm';
 import { Producto } from './producto.entity';
 import { Proveedor } from './proveedor.entity';
@@ -49,14 +48,18 @@ export class PrecioProducto {
 
 @Entity({ name: 'producto_proveedor' })
 export class ProductoProveedor {
-  @PrimaryColumn({ name: 'id_producto', type: 'uuid' })
+  @PrimaryGeneratedColumn('uuid', { name: 'id_producto_proveedor' })
+  id: string;
+
+  /** (id_producto, id_proveedor) es UNIQUE */
+  @Column({ name: 'id_producto', type: 'uuid' })
   idProducto: string;
 
   @ManyToOne(() => Producto)
   @JoinColumn({ name: 'id_producto' })
   producto: Producto;
 
-  @PrimaryColumn({ name: 'id_proveedor', type: 'uuid' })
+  @Column({ name: 'id_proveedor', type: 'uuid' })
   idProveedor: string;
 
   @ManyToOne(() => Proveedor)

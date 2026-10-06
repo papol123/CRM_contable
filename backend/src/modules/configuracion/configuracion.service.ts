@@ -111,7 +111,7 @@ export class ConfiguracionService {
               e.id_ciudad AS "idCiudad", c.nombre AS ciudad, e.direccion, e.telefono, e.email,
               e.responsable_iva AS "responsableIva", e.actualizado_en AS "actualizadoEn"
          FROM empresa e LEFT JOIN ciudades c ON c.id_ciudad = e.id_ciudad
-        ORDER BY e.id LIMIT 1`,
+        ORDER BY e.fila LIMIT 1`,
     );
     const { EMPRESA_LOGO_RUTA: logo } = await this.leerCategoria('EMPRESA_LOGO_RUTA');
     return {
@@ -123,7 +123,7 @@ export class ConfiguracionService {
 
   async updateDatosEmpresa(dto: EmpresaDto, actor: Actor) {
     return this.dataSource.transaction(async (manager) => {
-      const [anterior] = await manager.query(`SELECT * FROM empresa ORDER BY id LIMIT 1 FOR UPDATE`);
+      const [anterior] = await manager.query(`SELECT * FROM empresa ORDER BY fila LIMIT 1 FOR UPDATE`);
       if (!anterior && (!dto.nit || !dto.razonSocial)) {
         throw new UnprocessableEntityException('Para registrar la empresa envíe al menos NIT y razón social');
       }
@@ -138,9 +138,9 @@ export class ConfiguracionService {
         responsable_iva: dto.responsableIva ?? anterior?.responsable_iva ?? true,
       };
       await manager.query(
-        `INSERT INTO empresa (id, nit, razon_social, nombre_comercial, id_ciudad, direccion, telefono, email, responsable_iva, actualizado_en)
+        `INSERT INTO empresa (fila, nit, razon_social, nombre_comercial, id_ciudad, direccion, telefono, email, responsable_iva, actualizado_en)
          VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, now())
-         ON CONFLICT (id) DO UPDATE SET
+         ON CONFLICT (fila) DO UPDATE SET
            nit = EXCLUDED.nit, razon_social = EXCLUDED.razon_social, nombre_comercial = EXCLUDED.nombre_comercial,
            id_ciudad = EXCLUDED.id_ciudad, direccion = EXCLUDED.direccion, telefono = EXCLUDED.telefono,
            email = EXCLUDED.email, responsable_iva = EXCLUDED.responsable_iva, actualizado_en = now()`,

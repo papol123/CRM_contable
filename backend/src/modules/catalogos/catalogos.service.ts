@@ -16,7 +16,7 @@ import { Producto } from '../../database/entities/producto.entity';
 import { CreateMarcaDto, UpdateMarcaDto } from './dto/marca.dto';
 import { CreateCategoriaDto, UpdateCategoriaDto } from './dto/categoria.dto';
 import { CreateBodegaDto, UpdateBodegaDto } from './dto/bodega.dto';
-import { ESTADOS_PEDIDO_CON_RESERVA, sqlCantidadConSigno } from '../../common/inventario/stock';
+import { ESTADOS_PEDIDO_CON_RESERVA, SQL_CANTIDAD_CON_SIGNO } from '../../common/inventario/stock';
 import {
   CreateImpuestoDto,
   UpdateImpuestoDto,
@@ -206,7 +206,7 @@ export class CatalogosService {
 
     const [uso] = await this.bodegaRepository.manager.query(
       `SELECT
-         (SELECT COALESCE(SUM(${sqlCantidadConSigno('m')}), 0) FROM movimientos_inventario m WHERE m.id_bodega = $1) AS existencias,
+         (SELECT COALESCE(SUM(${SQL_CANTIDAD_CON_SIGNO}), 0) FROM movimientos_inventario m WHERE m.id_bodega = $1) AS existencias,
          (SELECT COUNT(*) FROM movimientos_inventario WHERE id_bodega = $1)::int AS movimientos,
          (SELECT COUNT(*) FROM pedidos WHERE id_bodega = $1 AND estado = ANY($2))::int AS pedidos,
          (SELECT COUNT(*) FROM conteos_inventario WHERE id_bodega = $1 AND estado = 'ABIERTO')::int AS conteos`,

@@ -1,0 +1,25 @@
+meta {
+  name: Otro Usuario no ve el pago en su listado
+  type: http
+  seq: 20
+}
+
+get {
+  url: {{baseUrl}}/pagos?limit=100
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenVendedor}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("el pago del Usuario no aparece", function () {
+    const ids = res.getBody().data.map((p) => p.id);
+    expect(ids).to.not.include(bru.getEnvVar("idPago"));
+  });
+}

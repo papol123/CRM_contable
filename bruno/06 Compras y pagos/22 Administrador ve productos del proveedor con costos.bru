@@ -1,0 +1,24 @@
+meta {
+  name: Administrador ve productos del proveedor con costos
+  type: http
+  seq: 22
+}
+
+get {
+  url: {{baseUrl}}/proveedores/{{idProveedor}}/productos
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("incluye costoActual", function () {
+    res.getBody().productosSuministrados.forEach((p) => expect(p).to.have.property("costoActual"));
+  });
+}

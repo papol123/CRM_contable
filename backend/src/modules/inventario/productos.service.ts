@@ -17,7 +17,7 @@ import {
   PreciosMasivosDto,
   ConsultaProductosDto,
 } from './dto/producto.dto';
-import { ESTADOS_PEDIDO_CON_RESERVA, costoPromedio, sqlCantidadConSigno } from '../../common/inventario/stock';
+import { ESTADOS_PEDIDO_CON_RESERVA, costoPromedio, SQL_CANTIDAD_CON_SIGNO } from '../../common/inventario/stock';
 import { fechaHoy, sumarDias } from '../../common/utils/fechas';
 import { redondear } from '../../common/documentos/totales';
 import { normalizarPaginacion, paginado } from '../../common/paginacion/paginacion';
@@ -66,7 +66,7 @@ export class ProductosService {
     const saldos = new Map<string, number>();
     if (productos.length) {
       const filas = await this.dataSource.query(
-        `SELECT m.id_producto, COALESCE(SUM(${sqlCantidadConSigno('m')}), 0) AS saldo
+        `SELECT m.id_producto, COALESCE(SUM(${SQL_CANTIDAD_CON_SIGNO}), 0) AS saldo
            FROM movimientos_inventario m
           WHERE m.id_producto = ANY($1::uuid[])
           GROUP BY m.id_producto`,
@@ -113,7 +113,7 @@ export class ProductosService {
 
     const saldosPorBodega = await this.dataSource.query(
       `SELECT b.id_bodega AS "idBodega", b.nombre AS "bodegaNombre", b.codigo AS "bodegaCodigo",
-              COALESCE(SUM(${sqlCantidadConSigno('m')}), 0) AS saldo
+              COALESCE(SUM(${SQL_CANTIDAD_CON_SIGNO}), 0) AS saldo
          FROM movimientos_inventario m
          JOIN bodegas b ON b.id_bodega = m.id_bodega
         WHERE m.id_producto = $1
@@ -247,7 +247,7 @@ export class ProductosService {
   private async validarPuedeDesactivar(db: EntityManager, prod: Producto) {
     const [fila] = await db.query(
       `SELECT
-         (SELECT COALESCE(SUM(${sqlCantidadConSigno('m')}), 0) FROM movimientos_inventario m WHERE m.id_producto = $1) AS saldo,
+         (SELECT COALESCE(SUM(${SQL_CANTIDAD_CON_SIGNO}), 0) FROM movimientos_inventario m WHERE m.id_producto = $1) AS saldo,
          (SELECT COUNT(*) FROM detalle_pedido d JOIN pedidos pe ON pe.id_pedido = d.id_pedido
            WHERE d.id_producto = $1 AND pe.estado = ANY($2))::int AS pedidos_abiertos`,
       [prod.id, ESTADOS_PEDIDO_CON_RESERVA],

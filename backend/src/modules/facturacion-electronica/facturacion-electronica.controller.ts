@@ -59,7 +59,7 @@ export class FacturacionElectronicaController {
   @RequirePermission('ventas.consultar')
   @ApiOperation({ summary: 'Datos de la empresa emisora' })
   async getEmpresa() {
-    const empresa = await this.empresaRepository.findOne({ where: { id: 1 } });
+    const empresa = await this.empresaRepository.findOne({ where: { fila: 1 } });
     if (!empresa) throw new NotFoundException('Los datos de la empresa no se han registrado');
     return empresa;
   }
@@ -68,7 +68,7 @@ export class FacturacionElectronicaController {
   @RequirePermission('configuracion.gestionar')
   @ApiOperation({ summary: 'Registrar o actualizar los datos de la empresa emisora' })
   async guardarEmpresa(@Body() dto: GuardarEmpresaDto) {
-    await this.empresaRepository.save(this.empresaRepository.create({ ...dto, id: 1 }));
-    return this.empresaRepository.findOne({ where: { id: 1 } });
+    await this.empresaRepository.save(this.empresaRepository.create({ ...dto, fila: 1 }));
+    return this.empresaRepository.findOne({ where: { fila: 1 } });
   }
 }

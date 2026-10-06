@@ -38,6 +38,25 @@ const TITULOS: Record<number, { tipo: string; titulo: string }> = {
   503: { tipo: 'dependencia-no-disponible', titulo: 'Servicio no disponible' },
 };
 
+/**
+ * Título específico por tipo de problema (GEMINI §6: p. ej. stock-insuficiente
+ * → "Stock insuficiente"). Si el tipo no está aquí se usa el título del status.
+ */
+const TITULOS_POR_TIPO: Record<string, string> = {
+  'stock-insuficiente': 'Stock insuficiente',
+  'credito-bloqueado': 'Crédito bloqueado',
+  'cupo-insuficiente': 'Cupo de crédito insuficiente',
+  'periodo-cerrado': 'Periodo contable cerrado',
+  'pago-supera-saldo': 'El pago supera el saldo',
+  'idempotencia-clave-reutilizada': 'Idempotency-Key reutilizada',
+  'idempotencia-en-proceso': 'Solicitud en proceso',
+  'ultimo-administrador': 'Último administrador',
+  'consecutivo-retrocede': 'Consecutivo inválido',
+  'job-duplicado': 'Proceso ya en curso',
+  duplicado: 'Registro duplicado',
+  'referencia-invalida': 'Referencia inválida',
+};
+
 /** Errores de PostgreSQL que son culpa de los datos enviados, no del servidor. */
 const ERRORES_POSTGRES: Record<string, { status: number; tipo: string; mensaje: string }> = {
   '23505': { status: HttpStatus.CONFLICT, tipo: 'duplicado', mensaje: 'Ya existe un registro con esos datos' },
@@ -160,7 +179,7 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
 
     const problema: Problema = {
       type: `${TIPO_PROBLEMA_BASE}/${tipo || base.tipo}`,
-      title: base.titulo,
+      title: (tipo && TITULOS_POR_TIPO[tipo]) || base.titulo,
       status,
       detail,
       instance,

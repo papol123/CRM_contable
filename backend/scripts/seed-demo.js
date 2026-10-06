@@ -706,38 +706,196 @@ const ORDEN_INSERCION = [
   'movimientos_inventario', 'pagos', 'aplicacion_pago_venta', 'aplicacion_pago_compra', 'gastos',
 ];
 
+/**
+ * INSERT fijo por tabla (GEMINI §4.5: prohibido concatenar variables en SQL).
+ * Las filas viajan como un único parámetro JSON ($1) y PostgreSQL las
+ * convierte a los tipos de la tabla con jsonb_populate_recordset.
+ */
+const INSERCION = {
+  terceros: {
+    columnas: ['id_tercero', 'id_tipo_documento', 'numero_documento', 'razon_social', 'tipo_persona', 'id_ciudad', 'activo'],
+    sql: `INSERT INTO terceros (id_tercero, id_tipo_documento, numero_documento, razon_social, tipo_persona, id_ciudad, activo)
+          SELECT id_tercero, id_tipo_documento, numero_documento, razon_social, tipo_persona, id_ciudad, activo FROM jsonb_populate_recordset(NULL::terceros, $1::jsonb)`,
+  },
+  proveedores: {
+    columnas: ['id_proveedor', 'id_tercero', 'dias_plazo'],
+    sql: `INSERT INTO proveedores (id_proveedor, id_tercero, dias_plazo)
+          SELECT id_proveedor, id_tercero, dias_plazo FROM jsonb_populate_recordset(NULL::proveedores, $1::jsonb)`,
+  },
+  clientes: {
+    columnas: ['id_cliente', 'id_tercero', 'cupo_credito', 'dias_plazo'],
+    sql: `INSERT INTO clientes (id_cliente, id_tercero, cupo_credito, dias_plazo)
+          SELECT id_cliente, id_tercero, cupo_credito, dias_plazo FROM jsonb_populate_recordset(NULL::clientes, $1::jsonb)`,
+  },
+  contactos: {
+    columnas: ['id_contacto', 'id_tercero', 'nombre', 'cargo', 'principal'],
+    sql: `INSERT INTO contactos (id_contacto, id_tercero, nombre, cargo, principal)
+          SELECT id_contacto, id_tercero, nombre, cargo, principal FROM jsonb_populate_recordset(NULL::contactos, $1::jsonb)`,
+  },
+  telefonos: {
+    columnas: ['id_telefono', 'id_tercero', 'id_contacto', 'numero', 'tipo', 'principal'],
+    sql: `INSERT INTO telefonos (id_telefono, id_tercero, id_contacto, numero, tipo, principal)
+          SELECT id_telefono, id_tercero, id_contacto, numero, tipo, principal FROM jsonb_populate_recordset(NULL::telefonos, $1::jsonb)`,
+  },
+  emails: {
+    columnas: ['id_email', 'id_tercero', 'id_contacto', 'email', 'tipo', 'principal'],
+    sql: `INSERT INTO emails (id_email, id_tercero, id_contacto, email, tipo, principal)
+          SELECT id_email, id_tercero, id_contacto, email, tipo, principal FROM jsonb_populate_recordset(NULL::emails, $1::jsonb)`,
+  },
+  direcciones: {
+    columnas: ['id_direccion', 'id_tercero', 'id_ciudad', 'direccion', 'tipo', 'principal'],
+    sql: `INSERT INTO direcciones (id_direccion, id_tercero, id_ciudad, direccion, tipo, principal)
+          SELECT id_direccion, id_tercero, id_ciudad, direccion, tipo, principal FROM jsonb_populate_recordset(NULL::direcciones, $1::jsonb)`,
+  },
+  productos: {
+    columnas: ['id_producto', 'codigo', 'nombre', 'id_categoria', 'id_unidad', 'id_impuesto_venta', 'maneja_inventario', 'stock_minimo', 'activo', 'id_marca'],
+    sql: `INSERT INTO productos (id_producto, codigo, nombre, id_categoria, id_unidad, id_impuesto_venta, maneja_inventario, stock_minimo, activo, id_marca)
+          SELECT id_producto, codigo, nombre, id_categoria, id_unidad, id_impuesto_venta, maneja_inventario, stock_minimo, activo, id_marca FROM jsonb_populate_recordset(NULL::productos, $1::jsonb)`,
+  },
+  producto_proveedor: {
+    columnas: ['id_producto', 'id_proveedor', 'codigo_proveedor', 'costo_actual', 'dias_entrega', 'es_principal'],
+    sql: `INSERT INTO producto_proveedor (id_producto, id_proveedor, codigo_proveedor, costo_actual, dias_entrega, es_principal)
+          SELECT id_producto, id_proveedor, codigo_proveedor, costo_actual, dias_entrega, es_principal FROM jsonb_populate_recordset(NULL::producto_proveedor, $1::jsonb)`,
+  },
+  precios_producto: {
+    columnas: ['id_precio', 'id_lista', 'id_producto', 'precio', 'vigente_desde', 'vigente_hasta'],
+    sql: `INSERT INTO precios_producto (id_precio, id_lista, id_producto, precio, vigente_desde, vigente_hasta)
+          SELECT id_precio, id_lista, id_producto, precio, vigente_desde, vigente_hasta FROM jsonb_populate_recordset(NULL::precios_producto, $1::jsonb)`,
+  },
+  facturas_compra: {
+    columnas: ['id_factura_compra', 'id_proveedor', 'id_estado', 'numero_factura', 'cufe', 'fecha_emision', 'fecha_vencimiento', 'id_bodega', 'id_usuario', 'motivo_anulacion'],
+    sql: `INSERT INTO facturas_compra (id_factura_compra, id_proveedor, id_estado, numero_factura, cufe, fecha_emision, fecha_vencimiento, id_bodega, id_usuario, motivo_anulacion)
+          SELECT id_factura_compra, id_proveedor, id_estado, numero_factura, cufe, fecha_emision, fecha_vencimiento, id_bodega, id_usuario, motivo_anulacion FROM jsonb_populate_recordset(NULL::facturas_compra, $1::jsonb)`,
+  },
+  detalle_factura_compra: {
+    columnas: ['id_detalle', 'id_factura_compra', 'id_producto', 'cantidad', 'costo_unitario', 'pct_iva'],
+    sql: `INSERT INTO detalle_factura_compra (id_detalle, id_factura_compra, id_producto, cantidad, costo_unitario, pct_iva)
+          SELECT id_detalle, id_factura_compra, id_producto, cantidad, costo_unitario, pct_iva FROM jsonb_populate_recordset(NULL::detalle_factura_compra, $1::jsonb)`,
+  },
+  facturas_venta: {
+    columnas: ['id_factura_venta', 'id_cliente', 'id_resolucion', 'id_estado', 'numero_venta', 'fecha_expedicion', 'fecha_vencimiento', 'retefuente', 'anulada', 'id_bodega', 'id_usuario', 'observaciones', 'motivo_anulacion'],
+    sql: `INSERT INTO facturas_venta (id_factura_venta, id_cliente, id_resolucion, id_estado, numero_venta, fecha_expedicion, fecha_vencimiento, retefuente, anulada, id_bodega, id_usuario, observaciones, motivo_anulacion)
+          SELECT id_factura_venta, id_cliente, id_resolucion, id_estado, numero_venta, fecha_expedicion, fecha_vencimiento, retefuente, anulada, id_bodega, id_usuario, observaciones, motivo_anulacion FROM jsonb_populate_recordset(NULL::facturas_venta, $1::jsonb)`,
+  },
+  detalle_factura_venta: {
+    columnas: ['id_detalle', 'id_factura_venta', 'id_producto', 'cantidad', 'valor_unitario', 'pct_descuento', 'pct_iva'],
+    sql: `INSERT INTO detalle_factura_venta (id_detalle, id_factura_venta, id_producto, cantidad, valor_unitario, pct_descuento, pct_iva)
+          SELECT id_detalle, id_factura_venta, id_producto, cantidad, valor_unitario, pct_descuento, pct_iva FROM jsonb_populate_recordset(NULL::detalle_factura_venta, $1::jsonb)`,
+  },
+  cotizaciones: {
+    columnas: ['id_cotizacion', 'numero', 'id_cliente', 'id_usuario', 'fecha', 'vigente_hasta', 'estado', 'observacion', 'motivo_rechazo', 'creado_en'],
+    sql: `INSERT INTO cotizaciones (id_cotizacion, numero, id_cliente, id_usuario, fecha, vigente_hasta, estado, observacion, motivo_rechazo, creado_en)
+          SELECT id_cotizacion, numero, id_cliente, id_usuario, fecha, vigente_hasta, estado, observacion, motivo_rechazo, creado_en FROM jsonb_populate_recordset(NULL::cotizaciones, $1::jsonb)`,
+  },
+  detalle_cotizacion: {
+    columnas: ['id_detalle', 'id_cotizacion', 'id_producto', 'cantidad', 'valor_unitario', 'pct_descuento', 'pct_iva'],
+    sql: `INSERT INTO detalle_cotizacion (id_detalle, id_cotizacion, id_producto, cantidad, valor_unitario, pct_descuento, pct_iva)
+          SELECT id_detalle, id_cotizacion, id_producto, cantidad, valor_unitario, pct_descuento, pct_iva FROM jsonb_populate_recordset(NULL::detalle_cotizacion, $1::jsonb)`,
+  },
+  pedidos: {
+    columnas: ['id_pedido', 'numero', 'id_cliente', 'id_cotizacion', 'id_bodega', 'id_usuario', 'id_factura_venta', 'fecha', 'estado', 'observacion', 'motivo_anulacion', 'creado_en'],
+    sql: `INSERT INTO pedidos (id_pedido, numero, id_cliente, id_cotizacion, id_bodega, id_usuario, id_factura_venta, fecha, estado, observacion, motivo_anulacion, creado_en)
+          SELECT id_pedido, numero, id_cliente, id_cotizacion, id_bodega, id_usuario, id_factura_venta, fecha, estado, observacion, motivo_anulacion, creado_en FROM jsonb_populate_recordset(NULL::pedidos, $1::jsonb)`,
+  },
+  detalle_pedido: {
+    columnas: ['id_detalle', 'id_pedido', 'id_producto', 'cantidad', 'valor_unitario', 'pct_descuento', 'pct_iva'],
+    sql: `INSERT INTO detalle_pedido (id_detalle, id_pedido, id_producto, cantidad, valor_unitario, pct_descuento, pct_iva)
+          SELECT id_detalle, id_pedido, id_producto, cantidad, valor_unitario, pct_descuento, pct_iva FROM jsonb_populate_recordset(NULL::detalle_pedido, $1::jsonb)`,
+  },
+  historial_estados_pedido: {
+    columnas: ['id_historial', 'id_pedido', 'estado', 'fecha', 'id_usuario', 'observacion'],
+    sql: `INSERT INTO historial_estados_pedido (id_historial, id_pedido, estado, fecha, id_usuario, observacion)
+          SELECT id_historial, id_pedido, estado, fecha, id_usuario, observacion FROM jsonb_populate_recordset(NULL::historial_estados_pedido, $1::jsonb)`,
+  },
+  movimientos_inventario: {
+    columnas: ['id_movimiento', 'id_producto', 'id_bodega', 'tipo_movimiento', 'cantidad', 'costo_unitario', 'fecha', 'origen_tabla', 'origen_id'],
+    sql: `INSERT INTO movimientos_inventario (id_movimiento, id_producto, id_bodega, tipo_movimiento, cantidad, costo_unitario, fecha, origen_tabla, origen_id)
+          SELECT id_movimiento, id_producto, id_bodega, tipo_movimiento, cantidad, costo_unitario, fecha, origen_tabla, origen_id FROM jsonb_populate_recordset(NULL::movimientos_inventario, $1::jsonb)`,
+  },
+  pagos: {
+    columnas: ['id_pago', 'id_tercero', 'id_metodo_pago', 'id_estado', 'tipo_pago', 'fecha_pago', 'monto', 'id_usuario', 'observaciones', 'motivo_anulacion'],
+    sql: `INSERT INTO pagos (id_pago, id_tercero, id_metodo_pago, id_estado, tipo_pago, fecha_pago, monto, id_usuario, observaciones, motivo_anulacion)
+          SELECT id_pago, id_tercero, id_metodo_pago, id_estado, tipo_pago, fecha_pago, monto, id_usuario, observaciones, motivo_anulacion FROM jsonb_populate_recordset(NULL::pagos, $1::jsonb)`,
+  },
+  aplicacion_pago_venta: {
+    columnas: ['id_aplicacion', 'id_pago', 'id_factura_venta', 'monto_aplicado'],
+    sql: `INSERT INTO aplicacion_pago_venta (id_aplicacion, id_pago, id_factura_venta, monto_aplicado)
+          SELECT id_aplicacion, id_pago, id_factura_venta, monto_aplicado FROM jsonb_populate_recordset(NULL::aplicacion_pago_venta, $1::jsonb)`,
+  },
+  aplicacion_pago_compra: {
+    columnas: ['id_aplicacion', 'id_pago', 'id_factura_compra', 'monto_aplicado'],
+    sql: `INSERT INTO aplicacion_pago_compra (id_aplicacion, id_pago, id_factura_compra, monto_aplicado)
+          SELECT id_aplicacion, id_pago, id_factura_compra, monto_aplicado FROM jsonb_populate_recordset(NULL::aplicacion_pago_compra, $1::jsonb)`,
+  },
+  gastos: {
+    columnas: ['id_gasto', 'id_categoria_gasto', 'id_metodo_pago', 'descripcion', 'monto', 'fecha', 'soporte_url', 'id_usuario', 'anulado', 'motivo_anulacion'],
+    sql: `INSERT INTO gastos (id_gasto, id_categoria_gasto, id_metodo_pago, descripcion, monto, fecha, soporte_url, id_usuario, anulado, motivo_anulacion)
+          SELECT id_gasto, id_categoria_gasto, id_metodo_pago, descripcion, monto, fecha, soporte_url, id_usuario, anulado, motivo_anulacion FROM jsonb_populate_recordset(NULL::gastos, $1::jsonb)`,
+  },
+};
+
+const FILAS_POR_LOTE = 5000;
+
 async function insertar(client, tabla, filas) {
   if (!filas || filas.length === 0) return;
-  const columnas = Object.keys(filas[0]);
-  const porLote = Math.floor(30000 / columnas.length);
-  for (let i = 0; i < filas.length; i += porLote) {
-    const lote = filas.slice(i, i + porLote);
-    const params = [];
-    const valores = lote.map((f) => {
-      const marcas = columnas.map((c) => {
-        params.push(f[c] === undefined ? null : f[c]);
-        return `$${params.length}`;
-      });
-      return `(${marcas.join(', ')})`;
-    });
-    await client.query(`INSERT INTO ${tabla} (${columnas.join(', ')}) VALUES ${valores.join(', ')}`, params);
+  const def = INSERCION[tabla];
+  const sobrantes = [...new Set(filas.flatMap((f) => Object.keys(f)))].filter((c) => !def.columnas.includes(c));
+  if (sobrantes.length) throw new Error(`Columnas no declaradas en INSERCION.${tabla}: ${sobrantes.join(', ')}`);
+  for (let i = 0; i < filas.length; i += FILAS_POR_LOTE) {
+    await client.query(def.sql, [JSON.stringify(filas.slice(i, i + FILAS_POR_LOTE))]);
   }
 }
 
-const TABLAS_DEMO_EN_ORDEN_DE_BORRADO = [
-  'historial_estados_pedido', 'detalle_pedido', 'pedidos', 'detalle_cotizacion', 'cotizaciones',
-  'aplicacion_pago_venta', 'aplicacion_pago_compra', 'pagos', 'gastos',
-  'detalle_factura_venta', 'facturas_venta', 'detalle_factura_compra', 'facturas_compra',
-  'movimientos_inventario', 'precios_producto', 'producto_proveedor', 'productos',
-  'direcciones', 'emails', 'telefonos', 'contactos', 'clientes', 'proveedores',
-];
+/**
+ * Borra los datos transaccionales (y los maestros que genera la demo) en
+ * orden de dependencias. Se conservan los terceros y empleados de los
+ * usuarios del sistema. Sentencias fijas, sin variables.
+ */
+const SQL_BORRAR_DEMO = `
+  DELETE FROM detalle_nomina;
+  DELETE FROM periodos_nomina;
+  DELETE FROM empleados WHERE id_tercero NOT IN (SELECT id_tercero FROM usuarios WHERE id_tercero IS NOT NULL);
+  DELETE FROM detalle_conteo_inventario;
+  DELETE FROM conteos_inventario;
+  DELETE FROM historial_estados_pedido;
+  DELETE FROM detalle_pedido;
+  DELETE FROM pedidos;
+  DELETE FROM detalle_cotizacion;
+  DELETE FROM cotizaciones;
+  DELETE FROM aplicacion_pago_venta;
+  DELETE FROM aplicacion_pago_compra;
+  DELETE FROM pagos;
+  DELETE FROM gastos;
+  DELETE FROM detalle_factura_venta;
+  DELETE FROM facturas_venta;
+  DELETE FROM detalle_factura_compra;
+  DELETE FROM facturas_compra;
+  DELETE FROM movimientos_inventario;
+  DELETE FROM precios_producto;
+  DELETE FROM producto_proveedor;
+  DELETE FROM productos;
+  DELETE FROM direcciones;
+  DELETE FROM emails;
+  DELETE FROM telefonos;
+  DELETE FROM contactos;
+  DELETE FROM clientes;
+  DELETE FROM proveedores;
+  DELETE FROM terceros WHERE id_tercero NOT IN (SELECT id_tercero FROM usuarios WHERE id_tercero IS NOT NULL);
+`;
+
+/**
+ * setval no es transaccional (un ROLLBACK no lo deshace), por eso las
+ * secuencias se alinean con los números realmente guardados después del COMMIT.
+ */
+const SQL_SINCRONIZAR_SECUENCIAS = `
+  SELECT setval('seq_cotizaciones',
+                COALESCE((SELECT MAX(CAST(substring(numero FROM '([0-9]+)$') AS BIGINT)) FROM cotizaciones), 0) + 1, false),
+         setval('seq_pedidos',
+                COALESCE((SELECT MAX(CAST(substring(numero FROM '([0-9]+)$') AS BIGINT)) FROM pedidos), 0) + 1, false)
+`;
 
 async function borrarDatosDemo(client) {
-  for (const tabla of TABLAS_DEMO_EN_ORDEN_DE_BORRADO) await client.query(`DELETE FROM ${tabla}`);
-  // Los terceros de los usuarios (empleados) se conservan
-  await client.query(`DELETE FROM terceros WHERE id_tercero NOT IN (
-    SELECT id_tercero FROM usuarios WHERE id_tercero IS NOT NULL)`);
-  await client.query(`SELECT setval('seq_cotizaciones', 1, false), setval('seq_pedidos', 1, false)`);
+  await client.query(SQL_BORRAR_DEMO);
 }
 
 async function main() {
@@ -758,7 +916,7 @@ async function main() {
     }
 
     const base = await cargarBase(client);
-    const secuencias = simular(base);
+    simular(base);
 
     await client.query('BEGIN');
     if (RESET) {
@@ -766,8 +924,6 @@ async function main() {
       await borrarDatosDemo(client);
     }
     for (const tabla of ORDEN_INSERCION) await insertar(client, tabla, T[tabla]);
-    if (secuencias.secCotizacion > 0) await client.query(`SELECT setval('seq_cotizaciones', $1)`, [secuencias.secCotizacion]);
-    if (secuencias.secPedido > 0) await client.query(`SELECT setval('seq_pedidos', $1)`, [secuencias.secPedido]);
 
     // Verificación: ningún producto puede quedar con saldo negativo en ninguna bodega
     const negativos = await client.query(`
@@ -783,6 +939,7 @@ async function main() {
       throw new Error(`Saldos negativos generados: ${JSON.stringify(negativos.rows)}`);
     }
     await client.query('COMMIT');
+    await client.query(SQL_SINCRONIZAR_SECUENCIAS);
 
     console.log('✅ Datos de demostración insertados:');
     for (const tabla of ORDEN_INSERCION) {

@@ -37,6 +37,45 @@ const ACCIONES_ACCESO = [
   'SOLICITUD_RESET_PASSWORD',
   'ACCESO_DENEGADO',
 ];
+interface FiltroBitacora {
+  fechaInicio: string | null;
+  fechaFin: string | null;
+  accion: string | null;
+  recurso: string | null;
+  resultado: string | null;
+  idUsuario: string | null;
+  recursoExacto: string | null;
+  idRecurso: string | null;
+  accionesAcceso: string[] | null;
+  patronesAccion: string[] | null;
+}
+
+const FILTRO_VACIO: FiltroBitacora = {
+  fechaInicio: null,
+  fechaFin: null,
+  accion: null,
+  recurso: null,
+  resultado: null,
+  idUsuario: null,
+  recursoExacto: null,
+  idRecurso: null,
+  accionesAcceso: null,
+  patronesAccion: null,
+};
+
+/** Filtro fijo de la bitácora: cada condición se desactiva con su parámetro en NULL. */
+const SQL_FILTRO_BITACORA = `
+      ($1::timestamptz IS NULL OR b.fecha >= $1::timestamptz)
+  AND ($2::date IS NULL OR b.fecha < ($2::date + 1))
+  AND ($3::varchar IS NULL OR b.accion ILIKE $3)
+  AND ($4::varchar IS NULL OR b.recurso ILIKE $4)
+  AND ($5::varchar IS NULL OR b.resultado = $5)
+  AND ($6::uuid IS NULL OR b.id_usuario = $6::uuid)
+  AND ($7::varchar IS NULL OR b.recurso = $7)
+  AND ($8::varchar IS NULL OR b.id_recurso::text = $8)
+  AND ($9::varchar[] IS NULL OR b.accion = ANY($9) OR b.recurso = 'auth')
+  AND ($10::varchar[] IS NULL OR b.accion ILIKE ANY($10))`;
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TAMANO_MAXIMO_VALOR = 16_000;
 
@@ -97,65 +136,69 @@ export class AuditoriaService {
   }
 
   async findAll(filtros: AuditoriaFiltros) {
-    const { condiciones, params } = this.condiciones(filtros);
-    return this.consultar(condiciones, params, normalizarPaginacion(filtros));
+    return this.consultar(this.filtroDe(filtros), normalizarPaginacion(filtros));
   }
 
   async findByRecurso(recurso: string, id: string, p: PaginacionDto = {}) {
-    return this.consultar(['b.recurso = $1', 'b.id_recurso::text = $2'], [recurso, id], normalizarPaginacion(p));
+    return this.consultar({ ...FILTRO_VACIO, recursoExacto: recurso, idRecurso: id }, normalizarPaginacion(p));
   }
 
   async findByUsuario(usuarioId: string, p: PaginacionDto = {}) {
-    return this.consultar(['b.id_usuario = $1'], [usuarioId], normalizarPaginacion(p));
+    return this.consultar({ ...FILTRO_VACIO, idUsuario: usuarioId }, normalizarPaginacion(p));
   }
 
   async findAnulaciones(p: PaginacionDto = {}) {
     const patrones = ACCIONES_ANULACION.map((a) => `%${a}%`);
-    return this.consultar([`b.accion ILIKE ANY($1)`], [patrones], normalizarPaginacion(p));
+    return this.consultar({ ...FILTRO_VACIO, patronesAccion: patrones }, normalizarPaginacion(p));
   }
 
   async findAccesos(p: PaginacionDto & { resultado?: string } = {}) {
-    const condiciones = [`(b.accion = ANY($1) OR b.recurso = 'auth')`];
-    const params: any[] = [ACCIONES_ACCESO];
-    if (p.resultado) {
-      params.push(p.resultado.toUpperCase());
-      condiciones.push(`b.resultado = $2`);
-    }
-    return this.consultar(condiciones, params, normalizarPaginacion(p));
+    return this.consultar(
+      { ...FILTRO_VACIO, accionesAcceso: ACCIONES_ACCESO, resultado: p.resultado?.toUpperCase() ?? null },
+      normalizarPaginacion(p),
+    );
   }
 
   /** Filas para exportación (sin paginar, con tope de seguridad). */
   async filasExportacion(filtros: AuditoriaFiltros, tope = 50_000) {
-    const { condiciones, params } = this.condiciones(filtros);
+    const filtro = this.filtroDe(filtros);
     const filas: any[] = [];
     for (let offset = 0; offset < tope; offset += 1000) {
-      const lote = await this.consultar(condiciones, params, { page: 1, limit: 1000, offset });
+      const lote = await this.consultar(filtro, { page: 1, limit: 1000, offset });
       filas.push(...lote.data);
       if (lote.data.length < 1000) break;
     }
     return filas;
   }
 
-  private condiciones(filtros: AuditoriaFiltros) {
-    const condiciones: string[] = [];
-    const params: any[] = [];
-    const agregar = (sql: string, valor: unknown) => {
-      params.push(valor);
-      condiciones.push(sql.replace('?', `$${params.length}`));
+  private filtroDe(filtros: AuditoriaFiltros): FiltroBitacora {
+    return {
+      ...FILTRO_VACIO,
+      fechaInicio: filtros.fechaInicio ?? null,
+      fechaFin: filtros.fechaFin?.slice(0, 10) ?? null,
+      accion: filtros.accion ? `%${filtros.accion}%` : null,
+      recurso: filtros.recurso ? `%${filtros.recurso}%` : null,
+      resultado: filtros.resultado?.toUpperCase() ?? null,
+      idUsuario: filtros.idUsuario ?? null,
     };
-    if (filtros.fechaInicio) agregar('b.fecha >= ?::timestamptz', filtros.fechaInicio);
-    if (filtros.fechaFin) agregar('b.fecha < (?::date + 1)', filtros.fechaFin.slice(0, 10));
-    if (filtros.accion) agregar('b.accion ILIKE ?', `%${filtros.accion}%`);
-    if (filtros.recurso) agregar('b.recurso ILIKE ?', `%${filtros.recurso}%`);
-    if (filtros.resultado) agregar('b.resultado = ?', filtros.resultado.toUpperCase());
-    if (filtros.idUsuario) agregar('b.id_usuario = ?', filtros.idUsuario);
-    return { condiciones, params };
   }
 
-  private async consultar(condiciones: string[], params: any[], pagina: { page: number; limit: number; offset: number }) {
-    const where = condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '';
+  /** Una sola consulta fija; cada filtro es un parámetro opcional (GEMINI.md §4.5). */
+  private async consultar(f: FiltroBitacora, pagina: { page: number; limit: number; offset: number }) {
+    const params = [
+      f.fechaInicio,
+      f.fechaFin,
+      f.accion,
+      f.recurso,
+      f.resultado,
+      f.idUsuario,
+      f.recursoExacto,
+      f.idRecurso,
+      f.accionesAcceso,
+      f.patronesAccion,
+    ];
     const [{ total }] = await this.dataSource.query(
-      `SELECT COUNT(*)::int AS total FROM bitacora_auditoria b ${where}`,
+      `SELECT COUNT(*)::int AS total FROM bitacora_auditoria b WHERE ${SQL_FILTRO_BITACORA}`,
       params,
     );
     const data = await this.dataSource.query(
@@ -166,9 +209,9 @@ export class AuditoriaService {
               b.motivo, b.resultado, b.ip_address AS "ip", b.user_agent AS "userAgent"
          FROM bitacora_auditoria b
          LEFT JOIN usuarios u ON u.id_usuario = b.id_usuario
-         ${where}
+        WHERE ${SQL_FILTRO_BITACORA}
         ORDER BY b.fecha DESC
-        LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+        LIMIT $11 OFFSET $12`,
       [...params, pagina.limit, pagina.offset],
     );
     return paginado(data, total, pagina);

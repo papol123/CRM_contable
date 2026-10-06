@@ -32,8 +32,8 @@ export class ProveedoresController {
   }
 
   @Get('comparar-precios')
-  @RequirePermission('terceros.consultar')
-  @ApiOperation({ summary: 'Comparar precio del producto entre proveedores' })
+  @RequirePermission('inventario.costos')
+  @ApiOperation({ summary: 'Comparar costo del producto entre proveedores (costos: solo Administrador, GEMINI §5.2)' })
   @ApiQuery({ name: 'productoId', required: true })
   async compararPrecios(@Query('productoId', ParseUUIDPipe) productoId: string) {
     return this.proveedoresService.compararPrecios(productoId);
@@ -86,8 +86,8 @@ export class ProveedoresController {
 
   @Get(':id/productos')
   @RequirePermission('terceros.consultar')
-  @ApiOperation({ summary: 'Consultar productos que suministra el proveedor' })
-  async findProductos(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string) {
-    return this.proveedoresService.findProductos(id);
+  @ApiOperation({ summary: 'Consultar productos que suministra el proveedor (el costo solo se incluye con inventario.costos)' })
+  async findProductos(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string, @Actor() actor: Actor) {
+    return this.proveedoresService.findProductos(id, actor.permisos.includes('inventario.costos'));
   }
 }

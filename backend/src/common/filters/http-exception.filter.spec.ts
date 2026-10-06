@@ -30,6 +30,7 @@ describe('GlobalHttpExceptionFilter (RFC 9457)', () => {
       solicitud,
     );
     expect(p.type).toBe(`${TIPO_PROBLEMA_BASE}/stock-insuficiente`);
+    expect(p.title).toBe('Stock insuficiente');
     expect(p.status).toBe(409);
   });
 

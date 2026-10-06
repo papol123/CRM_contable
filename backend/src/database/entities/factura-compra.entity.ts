@@ -71,6 +71,17 @@ export class FacturaCompra {
   @Column({ name: 'reteica', type: 'numeric', precision: 15, scale: 2, default: 0 })
   reteica: number;
 
+  /** Tarifas aplicadas al registrar (GEMINI §4.2: porcentajes NUMERIC(5,2)) */
+  @Column({ name: 'pct_retefuente', type: 'numeric', precision: 5, scale: 2, default: 0 })
+  pctRetefuente: number;
+
+  @Column({ name: 'pct_reteiva', type: 'numeric', precision: 5, scale: 2, default: 0 })
+  pctReteIva: number;
+
+  /** ReteICA por mil (‰) */
+  @Column({ name: 'tarifa_reteica', type: 'numeric', precision: 5, scale: 2, default: 0 })
+  tarifaReteIca: number;
+
   @OneToMany(() => DetalleFacturaCompra, (detalle) => detalle.facturaCompra, {
     cascade: true,
     eager: true,

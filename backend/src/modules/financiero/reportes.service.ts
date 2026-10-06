@@ -15,7 +15,7 @@ import {
   SQL_TOTAL_FACTURA_VENTA,
 } from '../../common/documentos/saldos';
 import { redondear } from '../../common/documentos/totales';
-import { sqlCantidadConSigno } from '../../common/inventario/stock';
+import { SQL_CANTIDAD_CON_SIGNO } from '../../common/inventario/stock';
 import { fechaHoy, rangoMes, sumarDias } from '../../common/utils/fechas';
 import { JobsService } from '../../common/jobs/jobs.service';
 import { AlmacenamientoService } from '../../common/almacenamiento/almacenamiento.service';
@@ -44,7 +44,7 @@ const PERMISO_REPORTE: Record<TipoReporte, string> = {
   ventas: 'ventas.consultar',
   inventario: 'inventario.consultar',
   cartera: 'cartera.consultar',
-  compras: 'compras.consultar',
+  compras: 'reportes.financieros',
   gastos: 'gastos.consultar_todos',
   utilidad: 'reportes.financieros',
   rentabilidad: 'reportes.financieros',
@@ -104,7 +104,7 @@ export class ReportesService implements OnModuleInit {
   /** KPIs operativos del día: volumen, sin costos ni márgenes (los ve el Usuario). */
   async getDashboardResumen(fecha = fechaHoy()) {
     const [ventas] = await this.dataSource.query(
-      `SELECT COUNT(*) AS remisiones, COALESCE(SUM(${SQL_TOTAL_FACTURA_VENTA('f')}), 0) AS total
+      `SELECT COUNT(*) AS remisiones, COALESCE(SUM(${SQL_TOTAL_FACTURA_VENTA}), 0) AS total
          FROM facturas_venta f
         WHERE f.anulada = false AND f.fecha_expedicion = $1`,
       [fecha],
@@ -122,7 +122,7 @@ export class ReportesService implements OnModuleInit {
            LEFT JOIN movimientos_inventario m ON m.id_producto = p.id_producto
           WHERE p.activo AND p.maneja_inventario
           GROUP BY p.id_producto, p.stock_minimo
-         HAVING COALESCE(SUM(${sqlCantidadConSigno('m')}), 0) <= p.stock_minimo
+         HAVING COALESCE(SUM(${SQL_CANTIDAD_CON_SIGNO}), 0) <= p.stock_minimo
        ) x`,
       [],
     );
@@ -265,7 +265,7 @@ export class ReportesService implements OnModuleInit {
     const params = [r.desde, r.hasta];
 
     const [resumen] = await this.dataSource.query(
-      `SELECT COUNT(*) AS remisiones, COALESCE(SUM(${SQL_TOTAL_FACTURA_VENTA('f')}), 0) AS total
+      `SELECT COUNT(*) AS remisiones, COALESCE(SUM(${SQL_TOTAL_FACTURA_VENTA}), 0) AS total
          FROM facturas_venta f
         WHERE f.anulada = false AND f.fecha_expedicion BETWEEN $1 AND $2`,
       params,
@@ -285,7 +285,7 @@ export class ReportesService implements OnModuleInit {
 
     const topClientes = await this.dataSource.query(
       `SELECT t.razon_social AS cliente, COUNT(*) AS remisiones,
-              ROUND(SUM(${SQL_TOTAL_FACTURA_VENTA('f')}), 2) AS total
+              ROUND(SUM(${SQL_TOTAL_FACTURA_VENTA}), 2) AS total
          FROM facturas_venta f
          JOIN clientes c ON c.id_cliente = f.id_cliente
          JOIN terceros t ON t.id_tercero = c.id_tercero
@@ -298,7 +298,7 @@ export class ReportesService implements OnModuleInit {
 
     const ventasPorDia = await this.dataSource.query(
       `SELECT to_char(f.fecha_expedicion, 'YYYY-MM-DD') AS fecha, COUNT(*) AS remisiones,
-              ROUND(SUM(${SQL_TOTAL_FACTURA_VENTA('f')}), 2) AS total
+              ROUND(SUM(${SQL_TOTAL_FACTURA_VENTA}), 2) AS total
          FROM facturas_venta f
         WHERE f.anulada = false AND f.fecha_expedicion BETWEEN $1 AND $2
         GROUP BY f.fecha_expedicion
@@ -323,7 +323,7 @@ export class ReportesService implements OnModuleInit {
   async getReporteInventario() {
     const filas = await this.dataSource.query(
       `WITH saldos AS (
-         SELECT m.id_producto, SUM(${sqlCantidadConSigno('m')}) AS stock
+         SELECT m.id_producto, SUM(${SQL_CANTIDAD_CON_SIGNO}) AS stock
            FROM movimientos_inventario m GROUP BY m.id_producto
        ), vendidas AS (
          SELECT d.id_producto, SUM(d.cantidad) AS unidades
@@ -504,7 +504,7 @@ export class ReportesService implements OnModuleInit {
                 ROUND(SUM(${SQL_BASE_LINEA_COMPRA}), 2) AS base,
                 ROUND(SUM(${SQL_BASE_LINEA_COMPRA} * COALESCE(d.pct_iva, 0) / 100), 2) AS iva,
                 fc.retefuente, fc.reteiva, fc.reteica,
-                ${SQL_TOTAL_FACTURA_COMPRA('fc')} AS total
+                ${SQL_TOTAL_FACTURA_COMPRA} AS total
            FROM facturas_compra fc
            JOIN estados_factura_compra e ON e.id_estado = fc.id_estado AND e.codigo <> 'ANULADA'
            JOIN proveedores pr ON pr.id_proveedor = fc.id_proveedor
@@ -537,7 +537,7 @@ export class ReportesService implements OnModuleInit {
     const filas = await this.dataSource.query(
       `SELECT u.id_usuario AS "idUsuario", u.nombres, u.apellidos, u.email,
               COUNT(f.id_factura_venta) AS remisiones,
-              ROUND(COALESCE(SUM(${SQL_TOTAL_FACTURA_VENTA('f')}), 0), 2) AS "totalVendido"
+              ROUND(COALESCE(SUM(${SQL_TOTAL_FACTURA_VENTA}), 0), 2) AS "totalVendido"
          FROM usuarios u
          LEFT JOIN facturas_venta f ON f.id_usuario = u.id_usuario AND f.anulada = false
                                    AND f.fecha_expedicion BETWEEN $1 AND $2

@@ -1,17 +1,17 @@
 meta {
-  name: Cuentas por pagar proximas a vencer
+  name: Comparar costos entre proveedores (Administrador)
   type: http
-  seq: 15
+  seq: 24
 }
 
 get {
-  url: {{baseUrl}}/cuentas-por-pagar/proximas-vencer?dias=30
+  url: {{baseUrl}}/proveedores/comparar-precios?productoId={{idProducto}}
   body: none
   auth: bearer
 }
 
 auth:bearer {
-  token: {{tokenUsuario}}
+  token: {{tokenAdmin}}
 }
 
 tests {

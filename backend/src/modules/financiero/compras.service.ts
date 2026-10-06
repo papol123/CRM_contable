@@ -56,6 +56,9 @@ export class ComprasService {
       reteica: t.reteica,
       totalRetenciones: t.totalRetenciones,
       total: t.total,
+      pctRetefuente: Number(compra.pctRetefuente ?? 0),
+      pctReteIva: Number(compra.pctReteIva ?? 0),
+      tarifaReteIcaPorMil: Number(compra.tarifaReteIca ?? 0),
     };
   }
 
@@ -173,6 +176,9 @@ export class ComprasService {
           retefuente: totales.retefuente,
           reteiva: totales.reteiva,
           reteica: totales.reteica,
+          pctRetefuente: dto.pctRetefuente ?? 0,
+          pctReteIva: dto.pctReteIva ?? 0,
+          tarifaReteIca: dto.tarifaReteIcaPorMil ?? 0,
         }),
       );
 

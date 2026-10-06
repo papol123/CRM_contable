@@ -12,21 +12,65 @@ import { Actor } from '../auth/decorators/actor.decorator';
  */
 type TipoConsecutivo = 'REMISION' | 'CONTEO' | 'COTIZACION' | 'PEDIDO';
 
+/**
+ * Cada tipo trae sus consultas escritas completas (GEMINI §4.5: ningún
+ * identificador ni valor se concatena en el SQL; solo parámetros $n).
+ */
 interface DefinicionConsecutivo {
   origen: 'config' | 'secuencia';
+  /** Nombre de la secuencia (solo se usa como parámetro ::regclass) */
   secuencia?: string;
   prefijoFijo?: string;
   digitos: number;
-  /** Tabla y columna donde se buscan números ya usados */
-  tabla: string;
-  columna: string;
+  /** SELECT last_value, is_called de la secuencia */
+  sqlSecuencia?: string;
+  /** $1 = número completo */
+  sqlExiste: string;
+  /** $1 = patrón 'PREFIJO-%' */
+  sqlMaximo: string;
+  /** $1 = patrón 'PREFIJO-%' */
+  sqlEmitidos: string;
 }
 
 const DEFINICIONES: Record<TipoConsecutivo, DefinicionConsecutivo> = {
-  REMISION: { origen: 'config', digitos: 6, tabla: 'facturas_venta', columna: 'numero_venta' },
-  CONTEO: { origen: 'config', digitos: 6, tabla: 'conteos_inventario', columna: 'numero' },
-  COTIZACION: { origen: 'secuencia', secuencia: 'seq_cotizaciones', prefijoFijo: 'COT', digitos: 5, tabla: 'cotizaciones', columna: 'numero' },
-  PEDIDO: { origen: 'secuencia', secuencia: 'seq_pedidos', prefijoFijo: 'PED', digitos: 5, tabla: 'pedidos', columna: 'numero' },
+  REMISION: {
+    origen: 'config',
+    digitos: 6,
+    sqlExiste: `SELECT 1 FROM facturas_venta WHERE numero_venta = $1 LIMIT 1`,
+    sqlMaximo: `SELECT COALESCE(MAX(CAST(substring(numero_venta FROM '([0-9]+)$') AS BIGINT)), 0) AS maximo
+                  FROM facturas_venta WHERE numero_venta LIKE $1`,
+    sqlEmitidos: `SELECT COUNT(*)::int AS emitidos FROM facturas_venta WHERE numero_venta LIKE $1`,
+  },
+  CONTEO: {
+    origen: 'config',
+    digitos: 6,
+    sqlExiste: `SELECT 1 FROM conteos_inventario WHERE numero = $1 LIMIT 1`,
+    sqlMaximo: `SELECT COALESCE(MAX(CAST(substring(numero FROM '([0-9]+)$') AS BIGINT)), 0) AS maximo
+                  FROM conteos_inventario WHERE numero LIKE $1`,
+    sqlEmitidos: `SELECT COUNT(*)::int AS emitidos FROM conteos_inventario WHERE numero LIKE $1`,
+  },
+  COTIZACION: {
+    origen: 'secuencia',
+    secuencia: 'seq_cotizaciones',
+    prefijoFijo: 'COT',
+    digitos: 5,
+    sqlSecuencia: `SELECT last_value, is_called FROM seq_cotizaciones`,
+    sqlExiste: `SELECT 1 FROM cotizaciones WHERE numero = $1 LIMIT 1`,
+    sqlMaximo: `SELECT COALESCE(MAX(CAST(substring(numero FROM '([0-9]+)$') AS BIGINT)), 0) AS maximo
+                  FROM cotizaciones WHERE numero LIKE $1`,
+    sqlEmitidos: `SELECT COUNT(*)::int AS emitidos FROM cotizaciones WHERE numero LIKE $1`,
+  },
+  PEDIDO: {
+    origen: 'secuencia',
+    secuencia: 'seq_pedidos',
+    prefijoFijo: 'PED',
+    digitos: 5,
+    sqlSecuencia: `SELECT last_value, is_called FROM seq_pedidos`,
+    sqlExiste: `SELECT 1 FROM pedidos WHERE numero = $1 LIMIT 1`,
+    sqlMaximo: `SELECT COALESCE(MAX(CAST(substring(numero FROM '([0-9]+)$') AS BIGINT)), 0) AS maximo
+                  FROM pedidos WHERE numero LIKE $1`,
+    sqlEmitidos: `SELECT COUNT(*)::int AS emitidos FROM pedidos WHERE numero LIKE $1`,
+  },
 };
 
 export const TIPOS_CONSECUTIVO = Object.keys(DEFINICIONES) as TipoConsecutivo[];
@@ -89,7 +133,7 @@ export class ConsecutivosService {
         siguienteNumero: formatear(fila.prefijo, Number(fila.siguiente_numero), def.digitos),
       };
     }
-    const [fila] = await this.dataSource.query(`SELECT last_value, is_called FROM ${def.secuencia}`);
+    const [fila] = await this.dataSource.query(def.sqlSecuencia!);
     const siguiente = fila?.is_called ? Number(fila.last_value) + 1 : Number(fila?.last_value || 1);
     return {
       tipo,
@@ -104,10 +148,7 @@ export class ConsecutivosService {
     for (const tipo of TIPOS_CONSECUTIVO) {
       const actual = await this.siguiente(tipo);
       const def = DEFINICIONES[tipo];
-      const [{ emitidos }] = await this.dataSource.query(
-        `SELECT COUNT(*)::int AS emitidos FROM ${def.tabla} WHERE ${def.columna} LIKE $1`,
-        [`${actual.prefijo}-%`],
-      );
+      const [{ emitidos }] = await this.dataSource.query(def.sqlEmitidos, [`${actual.prefijo}-%`]);
       resultado.push({
         ...actual,
         ultimoUsado: await this.maximoUsado(this.dataSource.manager, def, actual.prefijo!),
@@ -179,17 +220,12 @@ export class ConsecutivosService {
   }
 
   private async existe(manager: EntityManager, def: DefinicionConsecutivo, numero: string): Promise<boolean> {
-    const [fila] = await manager.query(`SELECT 1 FROM ${def.tabla} WHERE ${def.columna} = $1 LIMIT 1`, [numero]);
+    const [fila] = await manager.query(def.sqlExiste, [numero]);
     return !!fila;
   }
 
   private async maximoUsado(manager: EntityManager, def: DefinicionConsecutivo, prefijo: string): Promise<number> {
-    const [fila] = await manager.query(
-      `SELECT COALESCE(MAX(CAST(substring(${def.columna} FROM '([0-9]+)$') AS BIGINT)), 0) AS maximo
-         FROM ${def.tabla}
-        WHERE ${def.columna} LIKE $1`,
-      [`${prefijo}-%`],
-    );
+    const [fila] = await manager.query(def.sqlMaximo, [`${prefijo}-%`]);
     return Number(fila?.maximo || 0);
   }
 }

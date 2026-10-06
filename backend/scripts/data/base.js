@@ -185,6 +185,7 @@ module.exports = {
     { modulo: 'cartera', codigo: 'cartera.consultar', nombre: 'Consultar cartera', descripcion: 'Ver saldos y estados de cuenta' },
     { modulo: 'pagos', codigo: 'pagos.registrar', nombre: 'Registrar pagos', descripcion: 'Recibir y registrar pagos de clientes/proveedores' },
     { modulo: 'pagos', codigo: 'pagos.anular', nombre: 'Anular pagos', descripcion: 'Reversar pagos aplicados' },
+    { modulo: 'pagos', codigo: 'pagos.consultar_todos', nombre: 'Consultar todos los pagos', descripcion: 'Ver pagos y recibos registrados por cualquier usuario (sin él, solo los propios)' },
     { modulo: 'terceros', codigo: 'terceros.consultar', nombre: 'Consultar terceros', descripcion: 'Ver clientes y proveedores' },
     { modulo: 'terceros', codigo: 'terceros.crear', nombre: 'Crear terceros', descripcion: 'Crear nuevos clientes y proveedores' },
     { modulo: 'terceros', codigo: 'terceros.editar', nombre: 'Editar terceros', descripcion: 'Actualizar información de terceros' },

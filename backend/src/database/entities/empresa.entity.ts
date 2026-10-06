@@ -1,11 +1,15 @@
-import { Entity, PrimaryColumn, Column, ManyToOne, JoinColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, UpdateDateColumn } from 'typeorm';
 import { Ciudad } from './ciudad.entity';
 
-/** Datos de la empresa emisora. Tabla de una sola fila (id = 1). */
+/** Datos de la empresa emisora. Tabla de una sola fila (fila = 1, UNIQUE). */
 @Entity({ name: 'empresa' })
 export class Empresa {
-  @PrimaryColumn({ name: 'id', type: 'smallint', default: 1 })
-  id: number;
+  @PrimaryGeneratedColumn('uuid', { name: 'id_empresa' })
+  id: string;
+
+  /** Siempre 1: garantiza que exista una sola fila */
+  @Column({ name: 'fila', type: 'smallint', default: 1 })
+  fila: number;
 
   @Column({ name: 'nit', length: 20 })
   nit: string;

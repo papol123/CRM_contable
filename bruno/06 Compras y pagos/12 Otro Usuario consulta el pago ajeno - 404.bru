@@ -1,0 +1,30 @@
+meta {
+  name: Otro Usuario consulta el pago ajeno - 404
+  type: http
+  seq: 12
+}
+
+get {
+  url: {{baseUrl}}/pagos/{{idPago}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenVendedor}}
+}
+
+tests {
+  test("responde 404", function () {
+    expect(res.getStatus()).to.equal(404);
+  });
+  test("error en formato RFC 9457 (application/problem+json)", function () {
+    expect(res.getHeader("content-type")).to.contain("application/problem+json");
+    expect(res.getBody()).to.have.property("type");
+    expect(res.getBody()).to.have.property("instance");
+  });
+}
+
+docs {
+  Pagos propios (GEMINI §5.2/§5.4): sin pagos.consultar_todos solo se ven los pagos que uno registró. Un pago ajeno responde 404, igual que uno inexistente.
+}

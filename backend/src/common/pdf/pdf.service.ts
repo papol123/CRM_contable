@@ -70,7 +70,7 @@ export class PdfService {
 
   async datosEmpresa(): Promise<DatosEmpresaPdf> {
     const [empresa] = await this.dataSource.query(
-      `SELECT razon_social, nit, direccion, telefono, email FROM empresa ORDER BY id LIMIT 1`,
+      `SELECT razon_social, nit, direccion, telefono, email FROM empresa ORDER BY fila LIMIT 1`,
     );
     const [logo] = await this.dataSource.query(
       `SELECT valor FROM configuracion_sistema WHERE clave = 'EMPRESA_LOGO_RUTA' AND valor <> ''`,

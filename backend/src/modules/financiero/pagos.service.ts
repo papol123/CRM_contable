@@ -25,6 +25,11 @@ import { PdfService } from '../../common/pdf/pdf.service';
 import { AuditoriaService } from '../auditoria/auditoria.service';
 import { Actor } from '../auth/decorators/actor.decorator';
 
+/** Sin este permiso, el usuario solo ve los pagos que él registró (GEMINI §5.2 "Pagos propios", §5.4) */
+export const PERMISO_PAGOS_TODOS = 'pagos.consultar_todos';
+
+const puedeVerTodos = (actor?: Actor) => !actor || actor.permisos.includes(PERMISO_PAGOS_TODOS);
+
 @Injectable()
 export class PagosService {
   constructor(
@@ -35,7 +40,7 @@ export class PagosService {
     private readonly auditoria: AuditoriaService,
   ) {}
 
-  async findAll(filtros: ConsultaPagosDto = {}) {
+  async findAll(filtros: ConsultaPagosDto = {}, actor?: Actor) {
     const pagina = normalizarPaginacion(filtros);
     const query = this.pagoRepository
       .createQueryBuilder('p')
@@ -45,6 +50,7 @@ export class PagosService {
       .orderBy('p.fechaPago', 'DESC')
       .skip(pagina.offset)
       .take(pagina.limit);
+    if (!puedeVerTodos(actor)) query.andWhere('p.idUsuario = :uid', { uid: actor!.id });
     if (filtros.tipoPago) query.andWhere('p.tipoPago = :tipo', { tipo: filtros.tipoPago });
     if (filtros.idTercero) query.andWhere('p.idTercero = :idTercero', { idTercero: filtros.idTercero });
     if (filtros.desde) query.andWhere('p.fechaPago >= :desde', { desde: filtros.desde.slice(0, 10) });
@@ -54,12 +60,13 @@ export class PagosService {
     return paginado(data, total, pagina);
   }
 
-  async findById(id: string): Promise<any> {
+  async findById(id: string, actor?: Actor): Promise<any> {
     const pago = await this.pagoRepository.findOne({
       where: { id },
       relations: ['tercero', 'metodoPago', 'estado'],
     });
-    if (!pago) throw new NotFoundException(`Pago con ID ${id} no encontrado`);
+    // Un pago ajeno responde 404 igual que uno inexistente: no se revela que existe (§5.4)
+    if (!pago || (!puedeVerTodos(actor) && pago.idUsuario !== actor!.id)) throw new NotFoundException(`Pago con ID ${id} no encontrado`);
 
     const aplicaciones = await this.dataSource.query(
       `SELECT a.id_factura_venta AS "idFactura", f.numero_venta AS "numero", a.monto_aplicado AS "montoAplicado"
@@ -215,8 +222,8 @@ export class PagosService {
   }
 
   /** Recibo de caja (pagos de clientes) o comprobante de egreso (pagos a proveedores). */
-  async getRecibo(id: string): Promise<{ contenido: Buffer; nombre: string }> {
-    const pago = await this.findById(id);
+  async getRecibo(id: string, actor?: Actor): Promise<{ contenido: Buffer; nombre: string }> {
+    const pago = await this.findById(id, actor);
     const esVenta = pago.tipoPago === 'factura de venta';
     const titulo = esVenta ? 'Recibo de caja' : 'Comprobante de egreso';
     const numero = `${esVenta ? 'RC' : 'CE'}-${String(pago.id).slice(0, 8).toUpperCase()}`;
@@ -304,18 +311,23 @@ export class PagosService {
     idFactura: string,
     codigo: string,
   ) {
-    const [tabla, tablaEstados, columnaId] =
-      tipo === 'venta'
-        ? ['facturas_venta', 'estados_factura_venta', 'id_factura_venta']
-        : ['facturas_compra', 'estados_factura_compra', 'id_factura_compra'];
-    const intercambiables = tipo === 'venta' ? ['EMITIDA', 'PAGADA'] : ['RECIBIDA', 'PAGADA'];
-
-    await manager.query(
-      `UPDATE ${tabla} f
-          SET id_estado = (SELECT id_estado FROM ${tablaEstados} WHERE codigo = $2)
-        WHERE f.${columnaId} = $1
-          AND f.id_estado IN (SELECT id_estado FROM ${tablaEstados} WHERE codigo = ANY($3))`,
-      [idFactura, codigo, intercambiables],
-    );
+    // Una consulta fija por tipo de documento (GEMINI.md §4.5: sin nombres de tabla variables)
+    if (tipo === 'venta') {
+      await manager.query(
+        `UPDATE facturas_venta f
+            SET id_estado = (SELECT id_estado FROM estados_factura_venta WHERE codigo = $2)
+          WHERE f.id_factura_venta = $1
+            AND f.id_estado IN (SELECT id_estado FROM estados_factura_venta WHERE codigo IN ('EMITIDA', 'PAGADA'))`,
+        [idFactura, codigo],
+      );
+    } else {
+      await manager.query(
+        `UPDATE facturas_compra f
+            SET id_estado = (SELECT id_estado FROM estados_factura_compra WHERE codigo = $2)
+          WHERE f.id_factura_compra = $1
+            AND f.id_estado IN (SELECT id_estado FROM estados_factura_compra WHERE codigo IN ('RECIBIDA', 'PAGADA'))`,
+        [idFactura, codigo],
+      );
+    }
   }
 }

@@ -227,27 +227,20 @@ export class JobsService implements OnApplicationBootstrap, OnApplicationShutdow
   }
 
   async listar(filtros: { tipo?: string; estado?: string; limit: number; offset: number }) {
-    const condiciones: string[] = [];
-    const params: any[] = [];
-    if (filtros.tipo) {
-      params.push(filtros.tipo);
-      condiciones.push(`tipo = $${params.length}`);
-    }
-    if (filtros.estado) {
-      params.push(filtros.estado);
-      condiciones.push(`estado = $${params.length}`);
-    }
-    const where = condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '';
+    // SQL fijo con filtros opcionales como parámetros (GEMINI.md §4.5)
+    const params = [filtros.tipo ?? null, filtros.estado ?? null];
     const [{ total }] = await this.dataSource.query(
-      `SELECT COUNT(*)::int AS total FROM jobs_sistema ${where}`,
+      `SELECT COUNT(*)::int AS total FROM jobs_sistema
+        WHERE ($1::varchar IS NULL OR tipo = $1) AND ($2::varchar IS NULL OR estado = $2)`,
       params,
     );
     const data = await this.dataSource.query(
       `SELECT id_job, tipo, estado, progreso, error, parametros, id_usuario, intentos,
               ruta_archivo IS NOT NULL AS tiene_archivo, creado_en, iniciado_en, actualizado_en
-         FROM jobs_sistema ${where}
+         FROM jobs_sistema
+        WHERE ($1::varchar IS NULL OR tipo = $1) AND ($2::varchar IS NULL OR estado = $2)
         ORDER BY creado_en DESC
-        LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+        LIMIT $3 OFFSET $4`,
       [...params, filtros.limit, filtros.offset],
     );
     return { data, total };

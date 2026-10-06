@@ -24,7 +24,8 @@ async function main() {
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS schema_migraciones (
-        nombre      VARCHAR(200) PRIMARY KEY,
+        id_migracion UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        nombre      VARCHAR(200) NOT NULL CONSTRAINT uq_schema_migraciones_nombre UNIQUE,
         aplicada_en TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `);

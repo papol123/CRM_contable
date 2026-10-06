@@ -92,19 +92,14 @@ export class NominaService {
 
   async findAllEmpleados(filtros: ConsultaEmpleadosDto = {}) {
     const pagina = normalizarPaginacion(filtros);
-    const params: any[] = [];
-    const condiciones: string[] = [];
-    if (filtros.search?.trim()) {
-      params.push(`%${filtros.search.trim().toLowerCase()}%`);
-      condiciones.push(`(LOWER(t.razon_social) LIKE $${params.length} OR t.numero_documento LIKE $${params.length} OR LOWER(e.cargo) LIKE $${params.length})`);
-    }
-    if (filtros.activo) {
-      params.push(filtros.activo === 'true');
-      condiciones.push(`e.activo = $${params.length}`);
-    }
-    const where = condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '';
+    const params = [
+      filtros.search?.trim() ? `%${filtros.search.trim().toLowerCase()}%` : null,
+      filtros.activo ? filtros.activo === 'true' : null,
+    ];
     const [{ total }] = await this.dataSource.query(
-      `SELECT COUNT(*)::int AS total FROM empleados e LEFT JOIN terceros t ON t.id_tercero = e.id_tercero ${where}`,
+      `SELECT COUNT(*)::int AS total FROM empleados e LEFT JOIN terceros t ON t.id_tercero = e.id_tercero
+        WHERE ($1::varchar IS NULL OR LOWER(t.razon_social) LIKE $1 OR t.numero_documento LIKE $1 OR LOWER(e.cargo) LIKE $1)
+          AND ($2::boolean IS NULL OR e.activo = $2)`,
       params,
     );
     const data = await this.dataSource.query(
@@ -112,9 +107,10 @@ export class NominaService {
               t.razon_social AS "nombreCompleto", e.cargo, e.salario_base AS "salarioBase",
               e.fecha_ingreso AS "fechaIngreso", e.tipo_contrato AS "tipoContrato", e.activo, e.creado_en AS "creadoEn"
          FROM empleados e LEFT JOIN terceros t ON t.id_tercero = e.id_tercero
-         ${where}
+        WHERE ($1::varchar IS NULL OR LOWER(t.razon_social) LIKE $1 OR t.numero_documento LIKE $1 OR LOWER(e.cargo) LIKE $1)
+          AND ($2::boolean IS NULL OR e.activo = $2)
         ORDER BY t.razon_social
-        LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+        LIMIT $3 OFFSET $4`,
       [...params, pagina.limit, pagina.offset],
     );
     return paginado(data.map((e: any) => ({ ...e, salarioBase: Number(e.salarioBase) })), total, pagina);
@@ -180,24 +176,19 @@ export class NominaService {
 
   async updateEmpleado(id: string, dto: UpdateEmpleadoDto, actor: Actor) {
     const anterior = await this.findEmpleadoById(id);
-    const campos: string[] = [];
-    const params: any[] = [];
-    const columnas: Record<string, unknown> = {
-      cargo: dto.cargo?.trim(),
-      salario_base: dto.salarioBase,
-      tipo_contrato: dto.tipoContrato,
-      activo: dto.activo,
-    };
-    for (const [columna, valor] of Object.entries(columnas)) {
-      if (valor === undefined) continue;
-      params.push(valor);
-      campos.push(`${columna} = $${params.length}`);
-    }
-    if (!campos.length) return anterior;
+    if ([dto.cargo, dto.salarioBase, dto.tipoContrato, dto.activo].every((v) => v === undefined)) return anterior;
 
     await this.dataSource.transaction(async (manager) => {
-      params.push(id);
-      await manager.query(`UPDATE empleados SET ${campos.join(', ')} WHERE id_empleado = $${params.length}`, params);
+      // UPDATE fijo: un parámetro NULL conserva el valor actual de la columna
+      await manager.query(
+        `UPDATE empleados
+            SET cargo = COALESCE($2, cargo),
+                salario_base = COALESCE($3, salario_base),
+                tipo_contrato = COALESCE($4, tipo_contrato),
+                activo = COALESCE($5, activo)
+          WHERE id_empleado = $1`,
+        [id, dto.cargo?.trim() ?? null, dto.salarioBase ?? null, dto.tipoContrato ?? null, dto.activo ?? null],
+      );
       await this.auditoria.registrar(
         {
           idUsuario: actor.id,

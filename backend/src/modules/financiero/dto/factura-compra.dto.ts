@@ -100,7 +100,7 @@ export class CreateFacturaCompraDto {
 
   @ApiPropertyOptional({ example: 9.66, description: 'ReteICA: tarifa por mil (‰) sobre la base sin IVA' })
   @IsOptional()
-  @IsNumber({ maxDecimalPlaces: 3 })
+  @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   @Max(100)
   tarifaReteIcaPorMil?: number;

@@ -1,0 +1,21 @@
+meta {
+  name: Administrador ve el pago de cualquier usuario
+  type: http
+  seq: 14
+}
+
+get {
+  url: {{baseUrl}}/pagos/{{idPago}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

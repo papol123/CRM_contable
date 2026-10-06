@@ -42,7 +42,7 @@ export class FacturacionElectronicaService {
 
   /** Qué falta para poder emitir. Útil para una pantalla de configuración. */
   async estadoConfiguracion() {
-    const empresa = await this.empresaRepository.findOne({ where: { id: 1 } });
+    const empresa = await this.empresaRepository.findOne({ where: { fila: 1 } });
     const [resolucion] = await this.facturaRepository.manager.query(
       `SELECT numero_resolucion, clave_tecnica FROM resoluciones_dian
         WHERE vigente_hasta IS NULL OR vigente_hasta >= CURRENT_DATE

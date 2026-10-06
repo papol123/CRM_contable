@@ -72,6 +72,8 @@ describe('Flujos críticos', () => {
       const res = await post('/facturas-venta', usuario, venta({ items: [{ idProducto: producto.id, cantidad: 9_999_999, valorUnitario: 1 }] }));
       expect(res.status).toBe(409);
       expect(res.body.detail).toContain('Stock insuficiente');
+      expect(res.body.type).toMatch(/\/stock-insuficiente$/);
+      expect(res.body.title).toBe('Stock insuficiente');
     });
 
     it('anular devuelve el stock; anular dos veces → 409', async () => {
@@ -123,6 +125,8 @@ describe('Flujos críticos', () => {
       ).expect(201);
       compra = res.body;
       expect(compra).toMatchObject({ base: 90000, totalIva: 17100, retefuente: 2250, reteiva: 2565, reteica: 869.4, total: 101415.6, saldo: 101415.6 });
+      // GEMINI §4.2: las tarifas aplicadas quedan guardadas
+      expect(compra).toMatchObject({ pctRetefuente: 2.5, pctReteIva: 15, tarifaReteIcaPorMil: 9.66 });
     });
 
     it('número de factura duplicado del proveedor → 409', async () => {
@@ -148,6 +152,36 @@ describe('Flujos críticos', () => {
       await post(`/facturas-compra/${compra.id}/anular`, admin, { motivo: 'Factura errada' }).expect(409);
       await post(`/pagos/${pago.body.id}/anular`, admin, { motivo: 'Pago duplicado' }).expect(200);
       expect((await get(`/facturas-compra/${compra.id}`, usuario)).body.saldo).toBe(101415.6);
+    });
+
+    it('pagos propios (§5.2/§5.4): el Usuario no ve pagos de otros (404) y el Administrador ve todos', async () => {
+      const metodo = (await get('/medios-pago', admin)).body[0];
+      const base = { tipoPago: 'factura de compra', idFactura: compra.id, idMetodoPago: metodo.id };
+      const ajeno = (await post('/pagos', admin, { ...base, monto: 1000 }, randomUUID()).expect(201)).body;
+      const propio = (await post('/pagos', usuario, { ...base, monto: 1000 }, randomUUID()).expect(201)).body;
+
+      await get(`/pagos/${ajeno.id}`, usuario).expect(404);
+      await get(`/pagos/${ajeno.id}/recibo`, usuario).expect(404);
+      await get(`/pagos/${propio.id}`, usuario).expect(200);
+      const listaUsuario = (await get('/pagos?limit=100', usuario)).body.data.map((p: any) => p.id);
+      expect(listaUsuario).toContain(propio.id);
+      expect(listaUsuario).not.toContain(ajeno.id);
+
+      await get(`/pagos/${ajeno.id}`, admin).expect(200);
+      await get(`/pagos/${propio.id}`, admin).expect(200);
+
+      await post(`/pagos/${ajeno.id}/anular`, admin, { motivo: 'Prueba de propiedad' }).expect(200);
+      await post(`/pagos/${propio.id}/anular`, admin, { motivo: 'Prueba de propiedad' }).expect(200);
+    });
+
+    it('costos solo para Administrador: productos del proveedor sin costo para el Usuario', async () => {
+      const deUsuario = (await get(`/proveedores/${compra.idProveedor}/productos`, usuario).expect(200)).body;
+      expect(deUsuario.productosSuministrados.length).toBeGreaterThan(0);
+      expect(deUsuario.productosSuministrados.every((p: any) => !('costoActual' in p))).toBe(true);
+      const deAdmin = (await get(`/proveedores/${compra.idProveedor}/productos`, admin).expect(200)).body;
+      expect(deAdmin.productosSuministrados.every((p: any) => 'costoActual' in p)).toBe(true);
+      await get(`/proveedores/comparar-precios?productoId=${producto.id}`, usuario).expect(403);
+      await get(`/reportes/compras`, usuario).expect(403);
     });
   });
 
