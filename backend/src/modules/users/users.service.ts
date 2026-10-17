@@ -9,6 +9,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
+import { prepararPasswordConPepper } from '../../common/validacion/pepper';
 import { User } from '../../database/entities/user.entity';
 import { Role } from '../../database/entities/role.entity';
 import { RefreshToken } from '../../database/entities/refresh-token.entity';
@@ -135,7 +136,8 @@ export class UsersService {
 
     const invitar = !dto.password;
     // Una cuenta invitada tiene una contraseña aleatoria que nadie conoce hasta que acepta la invitación
-    const passwordHash = await bcrypt.hash(dto.password || randomBytes(32).toString('hex'), 10);
+    const rawPass = dto.password || randomBytes(32).toString('hex');
+    const passwordHash = await bcrypt.hash(prepararPasswordConPepper(rawPass), 10);
 
     const { id, token } = await this.dataSource.transaction(async (manager) => {
       const saved = await manager.save(
@@ -218,7 +220,7 @@ export class UsersService {
 
       const cambiaPassword = !!dto.password;
       if (cambiaPassword) {
-        user.passwordHash = await bcrypt.hash(dto.password!, 10);
+        user.passwordHash = await bcrypt.hash(prepararPasswordConPepper(dto.password!), 10);
       }
 
       if (dto.nombres !== undefined) user.nombres = dto.nombres.trim();
@@ -292,7 +294,7 @@ export class UsersService {
 
   async resetPassword(id: string, password: string): Promise<{ message: string }> {
     const user = await this.findById(id);
-    await this.userRepository.update(id, { passwordHash: await bcrypt.hash(password, 10) });
+    await this.userRepository.update(id, { passwordHash: await bcrypt.hash(prepararPasswordConPepper(password), 10) });
     const revocadas = await this.revocarTokens(id);
     return {
       message: `Contraseña de ${user.email} actualizada. Sesiones cerradas: ${revocadas}`,

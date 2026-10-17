@@ -3,11 +3,16 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import * as cookieParser from 'cookie-parser';
 import { GlobalHttpExceptionFilter } from './common/filters/http-exception.filter';
 
+import { securityHeadersMiddleware } from './common/middleware/security-headers.middleware';
+
 /**
  * Configuración HTTP común a main.ts y a las pruebas E2E: así las pruebas
  * ejercitan exactamente el mismo prefijo, validación, CORS y formato de errores.
  */
 export function configurarAplicacion(app: NestExpressApplication) {
+  // Cabeceras HTTP de seguridad (OWASP A02:2025 / API8:2023 / Proactive Controls C8)
+  app.use(securityHeadersMiddleware);
+
   // Cloud Run agrega un salto de proxy (X-Forwarded-For): con 1 salto req.ip es la IP
   // real del cliente sin aceptar cabeceras falsificadas (límite de peticiones y auditoría)
   app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS ?? 1));

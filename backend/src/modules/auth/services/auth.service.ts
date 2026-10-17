@@ -18,6 +18,9 @@ import { LoginDto } from '../dto/login.dto';
 import { AuthResponseDto } from '../dto/auth-response.dto';
 import { UpdateProfileDto } from '../dto/profile.dto';
 
+import { AccountLockoutService } from './account-lockout.service';
+import { prepararPasswordConPepper } from '../../../common/validacion/pepper';
+
 export interface ContextoCliente {
   ip?: string;
   userAgent?: string;
@@ -26,8 +29,8 @@ export interface ContextoCliente {
 /** Mismo mensaje para correo inexistente, inactivo o contraseña errada: no revela cuentas. */
 const CREDENCIALES_INVALIDAS = 'Correo o contraseña incorrectos';
 const COSTO_BCRYPT = 10;
-// Hash de una contraseña aleatoria: iguala el tiempo de respuesta cuando el correo no existe
-const HASH_SEÑUELO = bcrypt.hashSync(crypto.randomBytes(16).toString('hex'), COSTO_BCRYPT);
+// Hash de una contraseña aleatoria con pepper: iguala el tiempo de respuesta cuando el correo no existe
+const HASH_SEÑUELO = bcrypt.hashSync(prepararPasswordConPepper(crypto.randomBytes(16).toString('hex')), COSTO_BCRYPT);
 
 /** Convierte '15m', '8h', '7d' o segundos a segundos. */
 export function duracionEnSegundos(valor: string | number | undefined, porDefecto = 900): number {
@@ -50,6 +53,7 @@ export class AuthService {
     private readonly configService: ConfigService,
     private readonly auditoria: AuditoriaService,
     private readonly dataSource: DataSource,
+    private readonly lockoutService: AccountLockoutService,
     @InjectRepository(RefreshToken)
     private readonly refreshTokenRepository: Repository<RefreshToken>,
   ) {
@@ -57,15 +61,50 @@ export class AuthService {
   }
 
   async validateCredentials(email: string, pass: string, cliente: ContextoCliente = {}): Promise<User> {
-    const user = await this.usersService.findByEmail(email);
-    const coincide = await bcrypt.compare(pass, user?.passwordHash || HASH_SEÑUELO);
+    const emailNorm = email?.toLowerCase().trim() || '';
+
+    // Mitigación MITRE ATT&CK T1110 / OWASP API4: Bloqueo temporal por exceso de intentos fallidos
+    const bloqueo = this.lockoutService.estaBloqueado(emailNorm);
+    if (bloqueo.bloqueado) {
+      await this.auditoria.registrar({
+        idUsuario: null,
+        accion: 'LOGIN_BLOQUEADO',
+        recurso: 'auth',
+        valorNuevo: { email: emailNorm },
+        motivo: `Cuenta bloqueada temporalmente por exceso de intentos fallidos (${bloqueo.minutosRestantes} min restantes)`,
+        ip: cliente.ip,
+        userAgent: cliente.userAgent,
+        resultado: 'FALLO',
+      });
+      throw new UnauthorizedException(
+        `Cuenta temporalmente bloqueada por múltiples intentos fallidos (MITRE ATT&CK T1110). Intente de nuevo en ${bloqueo.minutosRestantes} minuto(s).`,
+      );
+    }
+
+    const user = await this.usersService.findByEmail(emailNorm);
+    const passConPepper = prepararPasswordConPepper(pass);
+
+    // 1. Intentar validar con Pepper (OWASP A04:2025 / C2)
+    let coincide = await bcrypt.compare(passConPepper, user?.passwordHash || HASH_SEÑUELO);
+
+    // 2. Retrocompatibilidad transparente: si no coincide con pepper, probar hash legacy sin pepper
+    if (!coincide && user?.passwordHash) {
+      const coincideLegacy = await bcrypt.compare(pass, user.passwordHash);
+      if (coincideLegacy) {
+        coincide = true;
+        // Migración transparente inmediata: actualizar hash a versión con Pepper
+        user.passwordHash = await bcrypt.hash(passConPepper, COSTO_BCRYPT);
+        await this.usersService.saveUser(user);
+      }
+    }
 
     if (!user || !coincide || !user.activo) {
+      this.lockoutService.registrarIntentoFallido(emailNorm);
       await this.auditoria.registrar({
         idUsuario: user?.id ?? null,
         accion: 'LOGIN_FALLIDO',
         recurso: 'auth',
-        valorNuevo: { email: email.toLowerCase().trim() },
+        valorNuevo: { email: emailNorm },
         motivo: !user ? 'Correo no registrado' : !coincide ? 'Contraseña incorrecta' : 'Usuario inactivo',
         ip: cliente.ip,
         userAgent: cliente.userAgent,
@@ -73,6 +112,9 @@ export class AuthService {
       });
       throw new UnauthorizedException(CREDENCIALES_INVALIDAS);
     }
+
+    // Login exitoso: restablecer intentos fallidos
+    this.lockoutService.limpiarIntentos(emailNorm);
     return user;
   }
 
@@ -194,7 +236,13 @@ export class AuthService {
     const userWithPass = await this.usersService.findUserWithPassword(userId);
     if (!userWithPass) throw new UnauthorizedException('Usuario no encontrado');
 
-    const isMatch = await bcrypt.compare(currentPass, userWithPass.passwordHash);
+    const passConPepper = prepararPasswordConPepper(currentPass);
+    let isMatch = await bcrypt.compare(passConPepper, userWithPass.passwordHash);
+    if (!isMatch) {
+      // Probar si el hash existente era legacy sin pepper
+      isMatch = await bcrypt.compare(currentPass, userWithPass.passwordHash);
+    }
+
     if (!isMatch) {
       throw new BadRequestException('La contraseña actual es incorrecta');
     }
@@ -202,7 +250,7 @@ export class AuthService {
       throw new BadRequestException('La nueva contraseña debe ser distinta de la actual');
     }
 
-    userWithPass.passwordHash = await bcrypt.hash(newPass, COSTO_BCRYPT);
+    userWithPass.passwordHash = await bcrypt.hash(prepararPasswordConPepper(newPass), COSTO_BCRYPT);
     await this.usersService.saveUser(userWithPass);
     await this.refreshTokenRepository.update({ idUsuario: userId }, { revocado: true });
     await this.auditoria.registrar({
@@ -251,7 +299,7 @@ export class AuthService {
 
       await manager.query(
         `UPDATE usuarios SET password_hash = $2, actualizado_en = now() WHERE id_usuario = $1`,
-        [consumido.idUsuario, await bcrypt.hash(newPass, COSTO_BCRYPT)],
+        [consumido.idUsuario, await bcrypt.hash(prepararPasswordConPepper(newPass), COSTO_BCRYPT)],
       );
       await manager.query(
         `UPDATE refresh_tokens SET revocado = true WHERE id_usuario = $1 AND revocado = false`,

@@ -40,11 +40,25 @@ function isSensitiveKey(key: string): boolean {
 }
 
 /**
+ * Sanitiza cadenas para prevenir ataques de Log Injection / Log Forging (CWE-117 / OWASP A09:2025).
+ * Elimina saltos de línea (\r, \n) y caracteres de control que podrían falsificar entradas en registros.
+ */
+export function sanitizeCrlf(texto: string): string {
+  if (typeof texto !== 'string') return texto;
+  return texto.replace(/[\r\n\x00-\x1f\x7f]+/g, ' ').trim();
+}
+
+/**
  * Sanitiza recursivamente objetos, arrays y valores para no filtrar credenciales en consola
+ * y neutralizar vectores de Log Injection (CRLF).
  */
 export function sanitizeData(data: any): any {
   if (data === null || data === undefined) {
     return data;
+  }
+
+  if (typeof data === 'string') {
+    return sanitizeCrlf(data);
   }
 
   if (typeof data !== 'object') {
@@ -65,6 +79,8 @@ export function sanitizeData(data: any): any {
       sanitized[key] = '*** [PROTEGIDO] ***';
     } else if (typeof value === 'object' && value !== null) {
       sanitized[key] = sanitizeData(value);
+    } else if (typeof value === 'string') {
+      sanitized[key] = sanitizeCrlf(value);
     } else {
       sanitized[key] = value;
     }
@@ -104,7 +120,9 @@ export class HttpLoggerMiddleware implements NestMiddleware {
   use(req: Request, res: Response, next: NextFunction): void {
     const startTime = Date.now();
     const { method, originalUrl, url } = req;
-    const requestUrl = originalUrl || url;
+    // Sanitización CRLF para evitar Log Injection (OWASP A09 / CWE-117)
+    const requestUrl = sanitizeCrlf(originalUrl || url);
+    const safeMethod = sanitizeCrlf(method);
 
     // Omitir archivos estáticos de Swagger UI o favicon para no saturar la consola
     if (
@@ -123,7 +141,7 @@ export class HttpLoggerMiddleware implements NestMiddleware {
 
       // Se agrupa por la plantilla de la ruta (/clientes/:id) para no crear una métrica por id
       const plantilla = req.route?.path ? `${req.baseUrl || ''}${req.route.path}` : 'sin-ruta';
-      this.metricas.registrar(method, plantilla, statusCode, duration);
+      this.metricas.registrar(safeMethod, plantilla, statusCode, duration);
 
       // Parámetros de ruta y query
       const routeParams = (req as any)._routeParams || req.params || {};
@@ -138,7 +156,7 @@ export class HttpLoggerMiddleware implements NestMiddleware {
         Object.keys(body).length > 0;
 
       const lines: string[] = [
-        `[${method}] ${requestUrl} -> ${statusCode} (${duration}ms)`,
+        `[${safeMethod}] ${requestUrl} -> ${statusCode} (${duration}ms)`,
       ];
 
       // Parámetros recibidos (Ruta y Query)

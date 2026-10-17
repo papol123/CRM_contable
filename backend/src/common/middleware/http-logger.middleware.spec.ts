@@ -192,5 +192,32 @@ describe('HttpLoggerMiddleware & Sanitization', () => {
       const loggedMessage = loggerErrorSpy.mock.calls[0][0];
       expect(loggedMessage).toContain('[POST] /api/v1/ventas -> 500');
     });
+
+    it('debe neutralizar caracteres CRLF en la URL para prevenir Log Injection (CWE-117 / OWASP A09)', () => {
+      let finishCallback: () => void = () => {};
+      const req: any = {
+        method: 'GET',
+        originalUrl: '/api/v1/auth/login\r\n[CRITICAL] Admin account forged',
+        params: {},
+        query: {},
+        body: null,
+      };
+      const res: any = {
+        statusCode: 200,
+        on: jest.fn((event, cb) => {
+          if (event === 'finish') finishCallback = cb;
+        }),
+      };
+      const next = jest.fn();
+
+      middleware.use(req, res, next);
+      finishCallback();
+
+      expect(loggerLogSpy).toHaveBeenCalled();
+      const loggedMessage = loggerLogSpy.mock.calls[0][0];
+      expect(loggedMessage).not.toContain('\r');
+      expect(loggedMessage).not.toContain('\n[CRITICAL]');
+      expect(loggedMessage).toContain('login [CRITICAL] Admin account forged');
+    });
   });
 });

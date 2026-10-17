@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { Response, Request } from 'express';
 import { QueryFailedError } from 'typeorm';
+import { obtenerMetodosPermitidos } from '../rutas/metodos-permitidos';
 
 /**
  * Respuestas de error en formato RFC 9457 (application/problem+json), GEMINI.md §6.
@@ -113,7 +114,22 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
 
-    const problema = this.construir(exception, request);
+    let problema = this.construir(exception, request);
+
+    // Mapeo explícito de verbos HTTP autorizados (retornar 405 Method Not Allowed con cabecera Allow, OWASP API8:2023)
+    if (problema.status === HttpStatus.NOT_FOUND && request?.method) {
+      const metodosPermitidos = obtenerMetodosPermitidos(request);
+      if (metodosPermitidos.length > 0 && !metodosPermitidos.includes(request.method.toUpperCase())) {
+        response.setHeader('Allow', metodosPermitidos.join(', '));
+        problema = {
+          type: `${TIPO_PROBLEMA_BASE}/metodo-no-permitido`,
+          title: 'Método no permitido',
+          status: HttpStatus.METHOD_NOT_ALLOWED,
+          detail: `El método ${request.method} no está soportado en esta ruta. Métodos autorizados: ${metodosPermitidos.join(', ')}`,
+          instance: request.originalUrl || request.url,
+        };
+      }
+    }
 
     if (problema.status >= 500) {
       this.logger.error(

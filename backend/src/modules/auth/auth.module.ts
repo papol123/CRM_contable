@@ -11,6 +11,8 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { PermissionsGuard } from './guards/permissions.guard';
 
+import { AccountLockoutService } from './services/account-lockout.service';
+
 @Module({
   imports: [
     ConfigModule,
@@ -29,7 +31,7 @@ import { PermissionsGuard } from './guards/permissions.guard';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, JwtAuthGuard, PermissionsGuard],
-  exports: [AuthService, JwtAuthGuard, PermissionsGuard, JwtModule],
+  providers: [AuthService, AccountLockoutService, JwtStrategy, JwtAuthGuard, PermissionsGuard],
+  exports: [AuthService, AccountLockoutService, JwtAuthGuard, PermissionsGuard, JwtModule],
 })
 export class AuthModule {}

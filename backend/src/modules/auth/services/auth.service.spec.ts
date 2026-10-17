@@ -6,6 +6,7 @@ import { UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { DataSource } from 'typeorm';
 import { AuthService, duracionEnSegundos } from './auth.service';
+import { AccountLockoutService } from './account-lockout.service';
 import { UsersService } from '../../users/users.service';
 import { TokensUsuarioService } from '../../users/tokens-usuario.service';
 import { AuditoriaService } from '../../auditoria/auditoria.service';
@@ -16,6 +17,7 @@ describe('AuthService', () => {
   let service: AuthService;
   let usersService: UsersService;
   let jwtService: JwtService;
+  let lockoutService: AccountLockoutService;
 
   const mockUser: Partial<User> = {
     id: 'user-uuid-1',
@@ -77,6 +79,14 @@ describe('AuthService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
+        {
+          provide: AccountLockoutService,
+          useValue: {
+            estaBloqueado: jest.fn().mockReturnValue({ bloqueado: false, minutosRestantes: 0 }),
+            registrarIntentoFallido: jest.fn().mockReturnValue({ bloqueado: false, intentosRestantes: 4 }),
+            limpiarIntentos: jest.fn(),
+          },
+        },
         { provide: UsersService, useValue: mockUsersService },
         { provide: JwtService, useValue: mockJwtService },
         { provide: ConfigService, useValue: mockConfigService },
@@ -90,6 +100,7 @@ describe('AuthService', () => {
     service = module.get<AuthService>(AuthService);
     usersService = module.get<UsersService>(UsersService);
     jwtService = module.get<JwtService>(JwtService);
+    lockoutService = module.get<AccountLockoutService>(AccountLockoutService);
   });
 
   it('debe estar definido', () => {
@@ -126,6 +137,14 @@ describe('AuthService', () => {
       await expect(
         service.validateCredentials('admin@crmcontable.com', 'wrongpassword'),
       ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('debe rechazar el intento si la cuenta está bloqueada temporalmente por fuerza bruta', async () => {
+      jest.spyOn(lockoutService, 'estaBloqueado').mockReturnValue({ bloqueado: true, minutosRestantes: 15 });
+
+      await expect(
+        service.validateCredentials('admin@crmcontable.com', 'cualquier-clave'),
+      ).rejects.toThrow(/temporalmente bloqueada/);
     });
   });
 
