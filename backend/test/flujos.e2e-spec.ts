@@ -1,6 +1,7 @@
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { randomUUID } from 'crypto';
 import { DataSource } from 'typeorm';
+import * as bcrypt from 'bcryptjs';
 import { api, crearApp, login, procesarJobs } from './utils/app';
 
 /**
@@ -216,11 +217,27 @@ describe('Flujos críticos', () => {
       await get(`/facturas-venta/${randomUUID()}`, usuario).expect(404);
     });
 
-    it('un gasto ajeno no se expone (404) y un Usuario no ve todos los gastos', async () => {
+    it('un gasto ajeno no se expone (404), un Vendedor no accede a gastos (403) y un Usuario no ve gastos ajenos', async () => {
       const categoria = (await get('/categorias-gasto', usuario)).body[0];
       const gasto = (await post('/gastos', usuario, { idCategoriaGasto: categoria.id, descripcion: 'Papelería', monto: 12000 }).expect(201)).body;
-      await get(`/gastos/${gasto.id}`, vendedor).expect(404);
-      const propios = (await get('/gastos?limit=100', vendedor)).body.data;
+
+      // 1. Vendedor no tiene cargo ni permiso de gastos: 403 Forbidden
+      await get(`/gastos/${gasto.id}`, vendedor).expect(403);
+      await get('/gastos?limit=100', vendedor).expect(403);
+
+      // 2. Usuario autorizado con gastos.registrar pero ajeno recibe 404 (IDOR)
+      const ds = app.get(DataSource);
+      const roles = (await ds.query(`SELECT id_rol FROM roles WHERE codigo = 'USUARIO'`))[0];
+      const idUsuario2 = randomUUID();
+      const hash = await bcrypt.hash('ClaveSegura2026*', 10);
+      await ds.query(
+        `INSERT INTO usuarios (id_usuario, id_rol, email, password_hash, nombres, apellidos, activo)
+         VALUES ($1, $2, 'otro_usuario@crmcontable.com', $3, 'Otro', 'Usuario', true)`,
+        [idUsuario2, roles.id_rol, hash],
+      );
+      const tokenOtro = (await login(app, 'otro_usuario@crmcontable.com', 'ClaveSegura2026*')).token;
+      await get(`/gastos/${gasto.id}`, tokenOtro).expect(404);
+      const propios = (await get('/gastos?limit=100', tokenOtro)).body.data;
       expect(propios.find((g: any) => g.id === gasto.id)).toBeUndefined();
     });
 
@@ -286,9 +303,9 @@ describe('Flujos críticos', () => {
         u.id_usuario,
         hashToken('token-de-prueba'),
       ]);
-      await post('/auth/reset-password', '', { token: 'token-de-prueba', newPassword: 'NuevaClave2026' }).expect(200);
-      await post('/auth/reset-password', '', { token: 'token-de-prueba', newPassword: 'OtraClave2026' }).expect(400);
-      await login(app, 'caja@crmcontable.com', 'NuevaClave2026');
+      await post('/auth/reset-password', '', { token: 'token-de-prueba', newPassword: 'NuevaClave2026Segura*' }).expect(200);
+      await post('/auth/reset-password', '', { token: 'token-de-prueba', newPassword: 'OtraClave2026Segura*' }).expect(400);
+      await login(app, 'caja@crmcontable.com', 'NuevaClave2026Segura*');
     });
   });
 });

@@ -11,9 +11,9 @@ async function testLogins() {
     { email: 'admin@crmcontable.com', pass: 'Admin123*', expectedRol: 'ADMIN' },
     { email: 'gerencia@crmcontable.com', pass: 'Admin123*', expectedRol: 'ADMIN' },
     { email: 'usuario@crmcontable.com', pass: 'Admin123*', expectedRol: 'USUARIO' },
-    { email: 'vendedor@crmcontable.com', pass: 'Admin123*', expectedRol: 'USUARIO' },
-    { email: 'operador@crmcontable.com', pass: 'Admin123*', expectedRol: 'USUARIO' },
-    { email: 'caja@crmcontable.com', pass: 'Admin123*', expectedRol: 'USUARIO' },
+    { email: 'vendedor@crmcontable.com', pass: 'Admin123*', expectedRol: 'VENDEDOR' },
+    { email: 'operador@crmcontable.com', pass: 'Admin123*', expectedRol: 'BODEGA' },
+    { email: 'caja@crmcontable.com', pass: 'Admin123*', expectedRol: 'CAJERO' },
   ];
 
   for (const tc of testCases) {

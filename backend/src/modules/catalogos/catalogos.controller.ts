@@ -27,8 +27,6 @@ import { CreateMarcaDto, UpdateMarcaDto } from './dto/marca.dto';
 
 @ApiTags('Catálogos')
 @ApiBearerAuth()
-// Lectura: cualquier usuario autenticado (alimentan formularios). Escritura: catalogos.gestionar
-@Autenticado()
 @Controller()
 export class CatalogosController {
   constructor(private readonly catalogosService: CatalogosService) {}
@@ -36,6 +34,7 @@ export class CatalogosController {
   // ─── Geografía ─────────────────────────────────────────────────────────────
 
   @Get('paises')
+  @Autenticado()
   @ApiOperation({ summary: 'Listar todos los países' })
   @ApiResponse({ status: 200, description: 'Lista de países' })
   async getPaises() {
@@ -43,12 +42,14 @@ export class CatalogosController {
   }
 
   @Get('paises/:id/departamentos')
+  @Autenticado()
   @ApiOperation({ summary: 'Departamentos de un país específico' })
   async getDepartamentosPorPais(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string) {
     return this.catalogosService.findDepartamentos(id);
   }
 
   @Get('departamentos')
+  @Autenticado()
   @ApiOperation({ summary: 'Listar departamentos (filtrables por país)' })
   @ApiQuery({ name: 'paisId', required: false, description: 'UUID del país' })
   async getDepartamentos(@Query('paisId') paisId?: string) {
@@ -56,12 +57,14 @@ export class CatalogosController {
   }
 
   @Get('departamentos/:id/ciudades')
+  @Autenticado()
   @ApiOperation({ summary: 'Ciudades de un departamento específico' })
   async getCiudadesPorDepartamento(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string) {
     return this.catalogosService.findCiudades(id);
   }
 
   @Get('ciudades')
+  @Autenticado()
   @ApiOperation({ summary: 'Listar ciudades (filtrables por departamento y búsqueda)' })
   @ApiQuery({ name: 'departamentoId', required: false, description: 'UUID del departamento' })
   @ApiQuery({ name: 'search', required: false, description: 'Búsqueda por nombre de ciudad' })
@@ -73,6 +76,7 @@ export class CatalogosController {
   }
 
   @Get('tipos-documento')
+  @Autenticado()
   @ApiOperation({ summary: 'Listar tipos de documento (NIT, CC, CE, etc.)' })
   async getTiposDocumento() {
     return this.catalogosService.findTiposDocumento();
@@ -81,6 +85,7 @@ export class CatalogosController {
   // ─── Categorías de Producto ────────────────────────────────────────────────
 
   @Get('categorias')
+  @Autenticado()
   @ApiOperation({ summary: 'Listar categorías de producto' })
   async getCategorias() {
     return this.catalogosService.findCategorias();
@@ -116,6 +121,7 @@ export class CatalogosController {
   // ─── Unidades de Medida ────────────────────────────────────────────────────
 
   @Get('unidades-medida')
+  @Autenticado()
   @ApiOperation({ summary: 'Listar unidades de medida' })
   async getUnidadesMedida() {
     return this.catalogosService.findUnidadesMedida();
@@ -124,6 +130,7 @@ export class CatalogosController {
   // ─── Impuestos ─────────────────────────────────────────────────────────────
 
   @Get('impuestos')
+  @Autenticado()
   @ApiOperation({ summary: 'Listar tarifas de impuesto' })
   async getImpuestos() {
     return this.catalogosService.findImpuestos();
@@ -151,12 +158,14 @@ export class CatalogosController {
   // ─── Métodos y Formas de Pago ──────────────────────────────────────────────
 
   @Get('medios-pago')
+  @Autenticado()
   @ApiOperation({ summary: 'Listar medios de pago (efectivo, transferencia, tarjeta)' })
   async getMediosPago() {
     return this.catalogosService.findMetodosPago();
   }
 
   @Get('formas-pago')
+  @Autenticado()
   @ApiOperation({ summary: 'Listar formas de pago (contado, crédito 15/30/60 días)' })
   async getFormasPago() {
     return this.catalogosService.findFormasPago();
@@ -165,6 +174,7 @@ export class CatalogosController {
   // ─── Bodegas ───────────────────────────────────────────────────────────────
 
   @Get('bodegas')
+  @Autenticado()
   @ApiOperation({ summary: 'Listar bodegas' })
   async getBodegas() {
     return this.catalogosService.findBodegas();
@@ -200,6 +210,7 @@ export class CatalogosController {
   // ─── Categorías de Gasto ───────────────────────────────────────────────────
 
   @Get('categorias-gasto')
+  @Autenticado()
   @ApiOperation({ summary: 'Listar categorías de gasto' })
   async getCategoriasGasto() {
     return this.catalogosService.findCategoriasGasto();
@@ -227,6 +238,7 @@ export class CatalogosController {
   // ─── Marcas ────────────────────────────────────────────────────────────────
 
   @Get('marcas')
+  @Autenticado()
   @ApiOperation({ summary: 'Listar marcas de repuestos y fabricantes' })
   async getMarcas() {
     return this.catalogosService.findMarcas();

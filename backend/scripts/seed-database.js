@@ -303,14 +303,27 @@ async function seedSeguridad(ciudades) {
     ON CONFLICT DO NOTHING`);
   contar('roles_permisos', admin.rowCount);
 
-  const usuario = await client.query(
-    `INSERT INTO roles_permisos (id_rol, id_permiso)
-     SELECT r.id_rol, p.id_permiso FROM roles r JOIN permisos p ON p.codigo = ANY($1)
-      WHERE r.codigo = 'USUARIO'
-     ON CONFLICT DO NOTHING`,
-    [base.permisosUsuarioOperativo],
-  );
-  contar('roles_permisos', usuario.rowCount);
+  if (base.permisosPorRol) {
+    for (const [codRol, codPermisos] of Object.entries(base.permisosPorRol)) {
+      const res = await client.query(
+        `INSERT INTO roles_permisos (id_rol, id_permiso)
+         SELECT r.id_rol, p.id_permiso FROM roles r JOIN permisos p ON p.codigo = ANY($1)
+          WHERE r.codigo = $2
+         ON CONFLICT DO NOTHING`,
+        [codPermisos, codRol],
+      );
+      contar('roles_permisos', res.rowCount);
+    }
+  } else {
+    const usuario = await client.query(
+      `INSERT INTO roles_permisos (id_rol, id_permiso)
+       SELECT r.id_rol, p.id_permiso FROM roles r JOIN permisos p ON p.codigo = ANY($1)
+        WHERE r.codigo = 'USUARIO'
+       ON CONFLICT DO NOTHING`,
+      [base.permisosUsuarioOperativo],
+    );
+    contar('roles_permisos', usuario.rowCount);
+  }
 
   const roles = Object.fromEntries(
     (await client.query('SELECT codigo, id_rol FROM roles')).rows.map((r) => [r.codigo, r.id_rol]),

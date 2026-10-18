@@ -95,14 +95,14 @@ describe('Autorización (catálogo §34)', () => {
 
   it('un rol desactivado deja al usuario sin permisos en la siguiente solicitud', async () => {
     const roles = (await api(app).get('/api/v1/roles').set('Authorization', `Bearer ${admin.token}`)).body;
-    const rolUsuario = roles.find((r: any) => r.codigo === 'USUARIO');
+    const rolVendedor = roles.find((r: any) => r.codigo === 'VENDEDOR') || roles.find((r: any) => r.codigo === 'USUARIO');
     const vendedor = await login(app, 'vendedor@crmcontable.com');
 
-    await api(app).patch(`/api/v1/roles/${rolUsuario.id}`).set('Authorization', `Bearer ${admin.token}`).send({ activo: false }).expect(200);
+    await api(app).patch(`/api/v1/roles/${rolVendedor.id}`).set('Authorization', `Bearer ${admin.token}`).send({ activo: false }).expect(200);
     try {
       await api(app).get('/api/v1/clientes').set('Authorization', `Bearer ${vendedor.token}`).expect(403);
     } finally {
-      await api(app).patch(`/api/v1/roles/${rolUsuario.id}`).set('Authorization', `Bearer ${admin.token}`).send({ activo: true }).expect(200);
+      await api(app).patch(`/api/v1/roles/${rolVendedor.id}`).set('Authorization', `Bearer ${admin.token}`).send({ activo: true }).expect(200);
     }
     await api(app).get('/api/v1/clientes').set('Authorization', `Bearer ${vendedor.token}`).expect(200);
   });

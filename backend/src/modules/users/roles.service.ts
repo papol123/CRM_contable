@@ -11,8 +11,10 @@ import { Permission } from '../../database/entities/permission.entity';
 import { User } from '../../database/entities/user.entity';
 import { CreateRoleDto, UpdateRoleDto } from './dto/role.dto';
 
-/** Roles del sistema que no se pueden eliminar ni dejar sin permisos. */
-const ROLES_PROTEGIDOS = ['ADMIN'];
+/** Roles del sistema que no se pueden eliminar. */
+const ROLES_NO_ELIMINABLES = ['ADMIN', 'USUARIO', 'VENDEDOR', 'CAJERO', 'BODEGA', 'COMPRAS'];
+/** Roles cuyos permisos y activación son inmutables (siempre tiene todos). */
+const ROLES_INMUTABLES = ['ADMIN'];
 
 @Injectable()
 export class RolesService {
@@ -69,7 +71,7 @@ export class RolesService {
 
   async update(id: string, dto: UpdateRoleDto): Promise<Role> {
     const role = await this.findById(id);
-    if (dto.activo === false && ROLES_PROTEGIDOS.includes(role.codigo)) {
+    if (dto.activo === false && ROLES_INMUTABLES.includes(role.codigo)) {
       throw new BadRequestException(`El rol ${role.codigo} no se puede desactivar`);
     }
     if (dto.nombre !== undefined) role.nombre = dto.nombre.trim();
@@ -81,7 +83,7 @@ export class RolesService {
 
   async replacePermisos(id: string, permisoIds: string[]): Promise<Role> {
     const role = await this.findById(id);
-    if (ROLES_PROTEGIDOS.includes(role.codigo)) {
+    if (ROLES_INMUTABLES.includes(role.codigo)) {
       throw new BadRequestException(
         `Los permisos del rol ${role.codigo} no se modifican: siempre tiene todos`,
       );
@@ -93,8 +95,8 @@ export class RolesService {
 
   async remove(id: string): Promise<{ message: string }> {
     const role = await this.findById(id);
-    if (ROLES_PROTEGIDOS.includes(role.codigo)) {
-      throw new BadRequestException(`El rol ${role.codigo} no se puede eliminar`);
+    if (ROLES_NO_ELIMINABLES.includes(role.codigo)) {
+      throw new BadRequestException(`El rol ${role.codigo} es un rol base del sistema y no se puede eliminar`);
     }
     const usuarios = await this.userRepository.count({ where: { idRol: id } });
     if (usuarios > 0) {
