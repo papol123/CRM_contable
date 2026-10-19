@@ -170,7 +170,7 @@ export class ReportesController {
   constructor(private readonly reportesService: ReportesService) {}
 
   @Get('dashboard/resumen')
-  @RequirePermission('ventas.consultar')
+  @RequirePermission('ventas.consultar_todos')
   @ApiOperation({ summary: 'KPIs operativos del día (volumen, sin costos ni márgenes)' })
   async getDashboardResumen() {
     return this.reportesService.getDashboardResumen();
@@ -198,7 +198,7 @@ export class ReportesController {
   }
 
   @Get('reportes/ventas')
-  @RequirePermission('ventas.consultar')
+  @RequirePermission('ventas.consultar_todos')
   @ApiOperation({ summary: 'Ventas por periodo, cliente y producto (sin márgenes). Por defecto, últimos 30 días' })
   async getReporteVentas(@Query() q: RangoFechasDto) {
     return this.reportesService.getReporteVentas(q.desde, q.hasta);
@@ -212,7 +212,7 @@ export class ReportesController {
   }
 
   @Get('reportes/cartera')
-  @RequirePermission('cartera.consultar')
+  @RequirePermission('cartera.consultar_todos')
   @ApiOperation({ summary: 'Cartera por edades y por cliente' })
   async getReporteCartera() {
     return this.reportesService.getReporteCartera();

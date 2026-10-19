@@ -8,7 +8,11 @@ uploads
 .env.*
 credentials
 test
-scripts
-database
+# Solo entran a la imagen el migrador y las migraciones
+scripts/*
+!scripts/migrate.js
+!scripts/lib
+database/*
+!database/migrations
 docs
 *.log

@@ -1,0 +1,31 @@
+meta {
+  name: Exportar inventario a CSV (asincrono)
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{baseUrl}}/reportes/exportar
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+body:json {
+  {
+    "tipo": "inventario"
+  }
+}
+
+script:post-response {
+  bru.setEnvVar("idJob", res.getBody().jobId);
+}
+
+tests {
+  test("responde 202", function () {
+    expect(res.getStatus()).to.equal(202);
+  });
+}

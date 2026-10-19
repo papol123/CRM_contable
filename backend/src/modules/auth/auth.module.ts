@@ -25,6 +25,7 @@ import { AccountLockoutService } from './services/account-lockout.service';
       useFactory: async (configService: ConfigService) => ({
         secret: configService.getOrThrow<string>('JWT_SECRET'),
         signOptions: {
+          algorithm: 'HS256',
           expiresIn: (configService.get<string>('JWT_EXPIRATION') || '15m') as any,
         },
       }),

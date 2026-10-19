@@ -1,0 +1,21 @@
+meta {
+  name: Comparar costos entre proveedores (Administrador)
+  type: http
+  seq: 26
+}
+
+get {
+  url: {{baseUrl}}/proveedores/comparar-precios?productoId={{idProducto}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

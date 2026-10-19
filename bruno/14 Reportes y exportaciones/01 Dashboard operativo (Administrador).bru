@@ -1,0 +1,21 @@
+meta {
+  name: Dashboard operativo (Administrador)
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/dashboard/resumen
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenAdmin}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

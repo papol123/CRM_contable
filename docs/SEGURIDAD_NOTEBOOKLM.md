@@ -204,4 +204,27 @@ Vulnerabilidades críticas específicas de arquitecturas de API y microservicios
   * `Google Cloud Run & GCP Well-Architected Framework`: Arquitectura Zero Trust, segregación de identidades (IAM) y seguridad desde el diseño (shift-left).
 
 ---
+
+## 7. Aplicación en el CRM: consulta global solo para Administrador
+
+Implementado con la migración `006_permisos_consulta_global.sql` siguiendo el cuaderno (Authorization Cheat Sheet, API1/API5:2023).
+
+### 🚫 Denegar por defecto
+`PermissionsGuard` responde **403** a toda ruta que no declare `@RequirePermission`, `@Autenticado` o `@Public` (antes la dejaba pasar) y registra `ACCESO_DENEGADO`. Los JWT solo se aceptan firmados con HS256.
+
+### 🔑 Permisos de consulta global
+| Permiso | Sin él | Con él |
+|---|---|---|
+| `terceros.consultar_todos` | Solo `GET /clientes/buscar` y `GET /proveedores/buscar` (máx. 20; id, nombre, documento y estado). Editar un tercero devuelve solo ese resumen. | Directorio completo, detalle, teléfonos, correos e historial |
+| `ventas.consultar_todos` | Remisiones, cotizaciones y pedidos **propios**; uno ajeno responde 404 (ver, PDF, editar, aprobar, cambiar estado, facturar) | Todos los documentos, `GET /dashboard/resumen`, `GET /reportes/ventas` |
+| `compras.consultar_todos` | Facturas de compra propias (y sus adjuntos); cuentas por pagar solo con `proveedorId` | Todas las compras, cuentas por pagar globales, vencidas y próximas a vencer, historial del proveedor |
+| `cartera.consultar_todos` | Estado de cuenta por cliente (`/clientes/:id/cartera`, `/cuentas-por-cobrar?clienteId=`) | Morosos, cartera vencida, resumen y reporte de cartera |
+
+### 👥 Asignación por rol
+* **ADMIN:** todos los permisos.
+* **CAJERO:** `ventas.consultar_todos` y `cartera.consultar_todos` (cobra cualquier remisión).
+* **BODEGA:** `compras.consultar_todos` (recibe cualquier compra).
+* **USUARIO, VENDEDOR, COMPRAS:** ninguno. La migración deja a `USUARIO` exactamente con sus 15 permisos operativos y el seed sincroniza cada rol con `scripts/data/base.js` (retira permisos acumulados).
+
+---
 *Documento generado desde el cuaderno Gemini Notebook: "The Definitive Blueprint for Secure API Architecture and Design".*

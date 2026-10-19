@@ -1,6 +1,6 @@
 # Colección Bruno — CRM Contable
 
-144 peticiones con pruebas automáticas, agrupadas por módulo. Abra esta carpeta en Bruno (**Open Collection**).
+162 peticiones con pruebas automáticas, agrupadas por módulo. Abra esta carpeta en Bruno (**Open Collection**).
 
 ## Entornos
 
@@ -8,6 +8,8 @@
 |---            |---|---|
 | **Cloud SQL - backend local** | `http://localhost:3000/api/v1` | Backend corriendo en su PC (`npm run start:dev`) con el `.env` apuntando a Cloud SQL |
 | **Cloud Run** | `https://crm-contable-api-916812392845.us-east1.run.app/api/v1` | Backend publicado en Cloud Run (proyecto `crm-cloud-506523`) |
+
+> La colección siempre corresponde al código del repositorio. Después de cambiar el backend, publíquelo con `backend/desplegar-cloud-run.ps1 -ProjectId crm-cloud-506523`: al arrancar, el contenedor aplica las migraciones pendientes en Cloud SQL, así que código, permisos y colección quedan alineados.
 
 ## Cómo correrla
 
@@ -30,3 +32,22 @@ npx @usebruno/cli run --env "Cloud SQL - backend local" -r
 - **MANUAL - Restablecer con el token del correo**: pegue en la variable `tokenRecuperacion` del entorno el token del enlace que llega a `caja@crmcontable.com` (con `CORREO_MODO=log` aparece en la consola del backend). Cambia la contraseña de ese usuario.
 - La lectura de XML usa `archivos/factura-proveedor.xml`, con el NIT del proveedor *Correas y Rodamientos Andinos Ltda* y el producto `REP-ACC-001` de la base actual.
 - La nómina espera `NOMINA_SMMLV=1423500` y auxilio de 200000. Si los actualiza a los valores vigentes, ajuste los valores esperados de esas dos pruebas.
+
+## Cuándo regenerar la colección
+
+Los archivos `.bru` se generan con `backend/scripts/bruno/generar_coleccion.py`
+(no los edite a mano: se sobrescriben).
+
+- **No hace falta** regenerar si cambia la lógica interna del backend o la base
+  de datos y las rutas, cuerpos y respuestas siguen iguales. Solo vuelva a correr la colección.
+- **Sí hace falta** si cambia una ruta, un campo del cuerpo, un permiso o el
+  código de respuesta esperado. Edite el generador y ejecute:
+
+  ```bash
+  cd CRM_contable
+  python backend/scripts/bruno/generar_coleccion.py
+  ```
+
+Regenerar borra las variables guardadas en los entornos (tokens, ids). No pasa
+nada: el script de la colección inicia sesión de nuevo y las pruebas vuelven a
+crear sus datos. Después cierre y abra la colección en Bruno para ver los cambios.

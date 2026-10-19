@@ -15,6 +15,16 @@ import { redondear } from '../../common/documentos/totales';
 import { normalizarPaginacion, paginado } from '../../common/paginacion/paginacion';
 import { AuditoriaService } from '../auditoria/auditoria.service';
 import { Actor } from '../auth/decorators/actor.decorator';
+import { PERMISOS_GLOBALES, puedeVerTodos } from '../../common/autorizacion/propiedad';
+import { LIMITE_BUSQUEDA, patronLike } from '../../common/utils/busqueda';
+
+/** Lo mínimo para elegir un proveedor en una compra o un pago. */
+export interface ResumenProveedor {
+  id: string;
+  razonSocial: string;
+  numeroDocumento: string;
+  activo: boolean;
+}
 import { ConsultaTercerosDto, HistorialComprasDto } from './dto/cliente.dto';
 
 @Injectable()
@@ -27,6 +37,28 @@ export class ProveedoresService {
     private readonly terceroRepository: Repository<Tercero>,
     private readonly auditoria: AuditoriaService,
   ) {}
+
+  /** Búsqueda liviana sin datos de contacto (OWASP API3:2023). */
+  async buscar(texto: string): Promise<ResumenProveedor[]> {
+    const proveedores = await this.proveedorRepository
+      .createQueryBuilder('p')
+      .innerJoin('p.tercero', 't')
+      .select(['p.id', 't.id', 't.razonSocial', 't.numeroDocumento', 't.activo'])
+      .where('(LOWER(t.razonSocial) LIKE :patron OR LOWER(t.numeroDocumento) LIKE :patron)', { patron: patronLike(texto) })
+      .orderBy('t.razonSocial', 'ASC')
+      .take(LIMITE_BUSQUEDA)
+      .getMany();
+    return proveedores.map((p) => this.resumen(p));
+  }
+
+  resumen(p: Proveedor): ResumenProveedor {
+    return {
+      id: p.id,
+      razonSocial: p.tercero.razonSocial,
+      numeroDocumento: p.tercero.numeroDocumento,
+      activo: p.tercero.activo,
+    };
+  }
 
   async findAll(filtros: ConsultaTercerosDto = {}) {
     const pagina = normalizarPaginacion(filtros);
@@ -131,7 +163,7 @@ export class ProveedoresService {
     return this.findById(idProveedor);
   }
 
-  async update(id: string, dto: UpdateProveedorDto, actor: Actor): Promise<Proveedor> {
+  async update(id: string, dto: UpdateProveedorDto, actor: Actor): Promise<Proveedor | ResumenProveedor> {
     const proveedor = await this.findById(id);
     if (dto.activo !== undefined && dto.activo !== proveedor.tercero.activo) {
       if (!actor.permisos.includes('terceros.eliminar')) {
@@ -166,7 +198,8 @@ export class ProveedoresService {
       ip: actor.ip,
       userAgent: actor.userAgent,
     });
-    return this.findById(id);
+    const actualizado = await this.findById(id);
+    return puedeVerTodos(actor, PERMISOS_GLOBALES.terceros) ? actualizado : this.resumen(actualizado);
   }
 
   /** Borrado lógico: se impide si quedan cuentas por pagar al proveedor. */

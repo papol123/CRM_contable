@@ -23,6 +23,17 @@ import { ESTADOS_PEDIDO_CON_RESERVA } from '../../common/inventario/stock';
 import { normalizarPaginacion, paginado } from '../../common/paginacion/paginacion';
 import { AuditoriaService } from '../auditoria/auditoria.service';
 import { Actor } from '../auth/decorators/actor.decorator';
+import { PERMISOS_GLOBALES, puedeVerTodos } from '../../common/autorizacion/propiedad';
+import { LIMITE_BUSQUEDA, patronLike } from '../../common/utils/busqueda';
+
+/** Lo mínimo para elegir un cliente en una venta, sin datos de contacto ni cupo. */
+export interface ResumenCliente {
+  id: string;
+  razonSocial: string;
+  numeroDocumento: string;
+  activo: boolean;
+  creditoBloqueado: boolean;
+}
 
 const PERMISO_CARTERA = 'cartera.gestionar';
 const PERMISO_ELIMINAR = 'terceros.eliminar';
@@ -64,6 +75,32 @@ export class ClientesService {
 
     const [data, total] = await query.getManyAndCount();
     return paginado(data, total, pagina);
+  }
+
+  /**
+   * Búsqueda liviana para usuarios sin terceros.consultar_todos: no expone el
+   * directorio completo ni datos de contacto (OWASP API3:2023).
+   */
+  async buscar(texto: string): Promise<ResumenCliente[]> {
+    const clientes = await this.clienteRepository
+      .createQueryBuilder('c')
+      .innerJoin('c.tercero', 't')
+      .select(['c.id', 'c.creditoBloqueado', 't.id', 't.razonSocial', 't.numeroDocumento', 't.activo'])
+      .where('(LOWER(t.razonSocial) LIKE :patron OR LOWER(t.numeroDocumento) LIKE :patron)', { patron: patronLike(texto) })
+      .orderBy('t.razonSocial', 'ASC')
+      .take(LIMITE_BUSQUEDA)
+      .getMany();
+    return clientes.map((c) => this.resumen(c));
+  }
+
+  resumen(c: Cliente): ResumenCliente {
+    return {
+      id: c.id,
+      razonSocial: c.tercero.razonSocial,
+      numeroDocumento: c.tercero.numeroDocumento,
+      activo: c.tercero.activo,
+      creditoBloqueado: c.creditoBloqueado,
+    };
   }
 
   async findById(id: string): Promise<Cliente> {
@@ -151,7 +188,7 @@ export class ClientesService {
     return this.findById(idCliente);
   }
 
-  async update(id: string, dto: UpdateClienteDto, actor: Actor): Promise<Cliente> {
+  async update(id: string, dto: UpdateClienteDto, actor: Actor): Promise<Cliente | ResumenCliente> {
     const cliente = await this.findById(id);
     if (dto.activo !== undefined && dto.activo !== cliente.tercero.activo) {
       if (!actor.permisos.includes(PERMISO_ELIMINAR)) {
@@ -187,7 +224,9 @@ export class ClientesService {
         userAgent: actor.userAgent,
       });
     }
-    return this.findById(id);
+    // Editar no da acceso a la ficha completa: sin el permiso global solo vuelve el resumen
+    const actualizado = await this.findById(id);
+    return puedeVerTodos(actor, PERMISOS_GLOBALES.terceros) ? actualizado : this.resumen(actualizado);
   }
 
   /** Borrado lógico: se impide si tiene saldo pendiente o pedidos abiertos (integridad histórica). */

@@ -27,6 +27,7 @@ import { normalizarPaginacion, paginado } from '../../common/paginacion/paginaci
 import { AdjuntosService, ArchivoSubido } from '../../common/archivos/adjuntos.service';
 import { AuditoriaService } from '../auditoria/auditoria.service';
 import { Actor } from '../auth/decorators/actor.decorator';
+import { PERMISOS_GLOBALES, asegurarPropietario, filtroPropietario } from '../../common/autorizacion/propiedad';
 
 const TIPOS_ADJUNTO_COMPRA = ['application/pdf', 'application/xml', 'text/xml'];
 
@@ -62,7 +63,7 @@ export class ComprasService {
     };
   }
 
-  async findAll(filtros: ConsultaComprasDto = {}) {
+  async findAll(filtros: ConsultaComprasDto = {}, actor?: Actor) {
     const pagina = normalizarPaginacion(filtros);
     const query = this.compraRepository
       .createQueryBuilder('c')
@@ -80,6 +81,9 @@ export class ComprasService {
         search: `%${filtros.search.trim().toLowerCase()}%`,
       });
     }
+    // Sin compras.consultar_todos cada usuario solo ve las compras que registró (GEMINI.md §5.4)
+    const propietario = filtroPropietario(actor, PERMISOS_GLOBALES.compras);
+    if (propietario) query.andWhere('c.idUsuario = :propietario', { propietario });
     if (filtros.proveedorId) query.andWhere('c.idProveedor = :proveedorId', { proveedorId: filtros.proveedorId });
     if (filtros.desde) query.andWhere('c.fechaEmision >= :desde', { desde: filtros.desde.slice(0, 10) });
     if (filtros.hasta) query.andWhere('c.fechaEmision <= :hasta', { hasta: filtros.hasta.slice(0, 10) });
@@ -101,7 +105,7 @@ export class ComprasService {
     return paginado(data, total, pagina);
   }
 
-  async findById(id: string): Promise<any> {
+  async findById(id: string, actor?: Actor): Promise<any> {
     const compra = await this.compraRepository
       .createQueryBuilder('c')
       .innerJoinAndSelect('c.proveedor', 'p')
@@ -112,6 +116,7 @@ export class ComprasService {
       .where('c.id = :id', { id })
       .getOne();
     if (!compra) throw new NotFoundException(`Factura de compra con ID ${id} no encontrada`);
+    asegurarPropietario(compra.idUsuario, actor, PERMISOS_GLOBALES.compras, `Factura de compra con ID ${id} no encontrada`);
 
     const [saldo] = await consultarSaldosCompra(this.dataSource.manager, { id });
     return {
@@ -241,9 +246,10 @@ export class ComprasService {
     return this.findById(id);
   }
 
-  async update(id: string, dto: UpdateFacturaCompraDto): Promise<any> {
+  async update(id: string, dto: UpdateFacturaCompraDto, actor?: Actor): Promise<any> {
     const compra = await this.compraRepository.findOne({ where: { id } });
     if (!compra) throw new NotFoundException('Factura de compra no encontrada');
+    asegurarPropietario(compra.idUsuario, actor, PERMISOS_GLOBALES.compras, 'Factura de compra no encontrada');
     if (compra.estado?.codigo === 'ANULADA') {
       throw new ConflictException('No se puede modificar una factura de compra anulada');
     }
@@ -261,7 +267,7 @@ export class ComprasService {
       cambios.fechaVencimiento = fecha;
     }
     if (Object.keys(cambios).length > 0) await this.compraRepository.update(id, cambios);
-    return this.findById(id);
+    return this.findById(id, actor);
   }
 
   /** Anula la compra, saca del inventario lo que entró y cierra la cuenta por pagar. */
@@ -395,20 +401,26 @@ export class ComprasService {
 
   // ─── Adjuntos ──────────────────────────────────────────────────────────────
 
-  async adjuntarArchivo(id: string, archivo: ArchivoSubido) {
-    const existe = await this.compraRepository.count({ where: { id } });
-    if (!existe) throw new NotFoundException(`Factura de compra con ID ${id} no encontrada`);
+  async adjuntarArchivo(id: string, archivo: ArchivoSubido, actor?: Actor) {
+    await this.asegurarAcceso(id, actor);
     return this.adjuntos.guardar('facturas_compra', id, archivo, TIPOS_ADJUNTO_COMPRA);
   }
 
-  async getAdjuntos(id: string) {
-    const existe = await this.compraRepository.count({ where: { id } });
-    if (!existe) throw new NotFoundException(`Factura de compra con ID ${id} no encontrada`);
+  async getAdjuntos(id: string, actor?: Actor) {
+    await this.asegurarAcceso(id, actor);
     return this.adjuntos.listar('facturas_compra', id, `/api/v1/facturas-compra/${id}/adjuntos`);
   }
 
-  async descargarAdjunto(id: string, idAdjunto: string) {
+  async descargarAdjunto(id: string, idAdjunto: string, actor?: Actor) {
+    await this.asegurarAcceso(id, actor);
     return this.adjuntos.leer('facturas_compra', id, idAdjunto);
+  }
+
+  /** La compra existe y el usuario puede verla; si no, 404 (GEMINI.md §5.4). */
+  private async asegurarAcceso(id: string, actor?: Actor): Promise<void> {
+    const compra = await this.compraRepository.findOne({ where: { id }, select: { id: true, idUsuario: true } });
+    if (!compra) throw new NotFoundException(`Factura de compra con ID ${id} no encontrada`);
+    asegurarPropietario(compra.idUsuario, actor, PERMISOS_GLOBALES.compras, `Factura de compra con ID ${id} no encontrada`);
   }
 
   // ─── Importación de XML del proveedor ──────────────────────────────────────

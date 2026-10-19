@@ -34,6 +34,7 @@ import { PdfService } from '../../common/pdf/pdf.service';
 import { ConsecutivosService } from './consecutivos.service';
 import { AuditoriaService } from '../auditoria/auditoria.service';
 import { Actor } from '../auth/decorators/actor.decorator';
+import { PERMISOS_GLOBALES, asegurarPropietario, filtroPropietario } from '../../common/autorizacion/propiedad';
 
 export interface OpcionesCreacionFactura {
   /** Pedido que se está facturando: su reserva no cuenta contra el stock disponible */
@@ -58,7 +59,7 @@ export class FacturasVentaService {
 
   // ─── Consultas ─────────────────────────────────────────────────────────────
 
-  async findAllFacturas(filtros: ConsultaRemisionesDto = {}) {
+  async findAllFacturas(filtros: ConsultaRemisionesDto = {}, actor?: Actor) {
     const pagina = normalizarPaginacion(filtros);
     const query = this.facturaRepository
       .createQueryBuilder('f')
@@ -78,6 +79,9 @@ export class FacturasVentaService {
         { search: `%${filtros.search.trim().toLowerCase()}%` },
       );
     }
+    // Sin ventas.consultar_todos cada usuario solo ve sus remisiones (GEMINI.md §5.4)
+    const propietario = filtroPropietario(actor, PERMISOS_GLOBALES.ventas);
+    if (propietario) query.andWhere('f.idUsuario = :propietario', { propietario });
     if (filtros.clienteId) query.andWhere('f.idCliente = :clienteId', { clienteId: filtros.clienteId });
     if (filtros.anulada !== undefined) query.andWhere('f.anulada = :anulada', { anulada: filtros.anulada });
     if (filtros.desde) query.andWhere('f.fechaExpedicion >= :desde', { desde: filtros.desde.slice(0, 10) });
@@ -103,7 +107,7 @@ export class FacturasVentaService {
     return paginado(data, total, pagina);
   }
 
-  async findFacturaById(id: string): Promise<any> {
+  async findFacturaById(id: string, actor?: Actor): Promise<any> {
     const factura = await this.facturaRepository
       .createQueryBuilder('f')
       .innerJoinAndSelect('f.cliente', 'c')
@@ -119,6 +123,7 @@ export class FacturasVentaService {
       .getOne();
 
     if (!factura) throw new NotFoundException(`Remisión con ID ${id} no encontrada`);
+    asegurarPropietario(factura.idUsuario, actor, PERMISOS_GLOBALES.ventas, `Remisión con ID ${id} no encontrada`);
 
     const [saldo] = await consultarSaldosVenta(this.dataSource.manager, {
       id,
@@ -310,9 +315,10 @@ export class FacturasVentaService {
   }
 
   /** Solo campos no financieros: vencimiento y observaciones. */
-  async updateFactura(id: string, dto: UpdateFacturaVentaDto): Promise<any> {
+  async updateFactura(id: string, dto: UpdateFacturaVentaDto, actor?: Actor): Promise<any> {
     const factura = await this.facturaRepository.findOne({ where: { id } });
     if (!factura) throw new NotFoundException(`Remisión con ID ${id} no encontrada`);
+    asegurarPropietario(factura.idUsuario, actor, PERMISOS_GLOBALES.ventas, `Remisión con ID ${id} no encontrada`);
     if (factura.anulada) {
       throw new ConflictException('No se puede modificar una remisión anulada');
     }
@@ -328,7 +334,7 @@ export class FacturasVentaService {
     if (dto.observaciones !== undefined) cambios.observaciones = dto.observaciones;
     if (Object.keys(cambios).length > 0) await this.facturaRepository.update(id, cambios);
 
-    return this.findFacturaById(id);
+    return this.findFacturaById(id, actor);
   }
 
   // ─── Anulación ─────────────────────────────────────────────────────────────
@@ -431,8 +437,8 @@ export class FacturasVentaService {
     });
   }
 
-  async getFacturaPdf(id: string): Promise<{ contenido: Buffer; nombre: string }> {
-    const f = await this.findFacturaById(id);
+  async getFacturaPdf(id: string, actor?: Actor): Promise<{ contenido: Buffer; nombre: string }> {
+    const f = await this.findFacturaById(id, actor);
     const t = f.cliente.tercero;
     const contenido = await this.pdf.documento({
       titulo: 'Remisión',

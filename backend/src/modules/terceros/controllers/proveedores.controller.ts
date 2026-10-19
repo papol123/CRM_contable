@@ -16,7 +16,7 @@ import { ProveedoresService } from '../proveedores.service';
 import { RequirePermission } from '../../auth/decorators/permissions.decorator';
 import { Actor } from '../../auth/decorators/actor.decorator';
 import { CreateProveedorDto, UpdateProveedorDto } from '../dto/proveedor-datos.dto';
-import { ConsultaTercerosDto, HistorialComprasDto } from '../dto/cliente.dto';
+import { BusquedaTercerosDto, ConsultaTercerosDto, HistorialComprasDto } from '../dto/cliente.dto';
 
 @ApiTags('Proveedores')
 @ApiBearerAuth()
@@ -25,10 +25,20 @@ export class ProveedoresController {
   constructor(private readonly proveedoresService: ProveedoresService) {}
 
   @Get()
-  @RequirePermission('terceros.consultar')
-  @ApiOperation({ summary: 'Listar proveedores (paginado; busca por documento o razón social)' })
+  @RequirePermission('terceros.consultar_todos')
+  @ApiOperation({ summary: 'Listar proveedores con datos de contacto (paginado; busca por documento o razón social)' })
   async findAll(@Query() filtros: ConsultaTercerosDto) {
     return this.proveedoresService.findAll(filtros);
+  }
+
+  @Get('buscar')
+  @RequirePermission('terceros.consultar')
+  @ApiOperation({
+    summary: 'Buscar proveedores para un selector (máx. 20; solo id, nombre, documento y estado)',
+    description: 'No incluye datos de contacto. El directorio completo requiere terceros.consultar_todos.',
+  })
+  async buscar(@Query() q: BusquedaTercerosDto) {
+    return this.proveedoresService.buscar(q.q);
   }
 
   @Get('comparar-precios')
@@ -40,7 +50,7 @@ export class ProveedoresController {
   }
 
   @Get(':id')
-  @RequirePermission('terceros.consultar')
+  @RequirePermission('terceros.consultar_todos')
   @ApiOperation({ summary: 'Consultar detalle del proveedor' })
   async findOne(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string) {
     return this.proveedoresService.findById(id);
@@ -75,7 +85,7 @@ export class ProveedoresController {
   }
 
   @Get(':id/historial-compras')
-  @RequirePermission('compras.consultar')
+  @RequirePermission('compras.consultar_todos')
   @ApiOperation({ summary: 'Consultar compras realizadas al proveedor' })
   async findHistorialCompras(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,

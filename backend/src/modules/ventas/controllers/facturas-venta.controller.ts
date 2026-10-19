@@ -37,9 +37,12 @@ export class FacturasVentaController {
 
   @Get()
   @RequirePermission('ventas.consultar')
-  @ApiOperation({ summary: 'Listar remisiones (paginado; filtra por texto, cliente, estado y fechas; incluye saldo)' })
-  async findAll(@Query() filtros: ConsultaRemisionesDto) {
-    return this.facturasService.findAllFacturas(filtros);
+  @ApiOperation({
+    summary: 'Listar remisiones (paginado; filtra por texto, cliente, estado y fechas; incluye saldo)',
+    description: 'Sin ventas.consultar_todos solo devuelve las remisiones del usuario autenticado.',
+  })
+  async findAll(@Query() filtros: ConsultaRemisionesDto, @Actor() actor: Actor) {
+    return this.facturasService.findAllFacturas(filtros, actor);
   }
 
   @Get('siguiente-consecutivo')
@@ -61,16 +64,16 @@ export class FacturasVentaController {
   @RequirePermission('ventas.consultar')
   @ApiOperation({ summary: 'Detalle de la remisión con pagos aplicados y saldo' })
   @ApiResponse({ status: 404, description: 'Remisión no encontrada' })
-  async findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.facturasService.findFacturaById(id);
+  async findOne(@Param('id', ParseUUIDPipe) id: string, @Actor() actor: Actor) {
+    return this.facturasService.findFacturaById(id, actor);
   }
 
   @Get(':id/pdf')
   @RequirePermission('ventas.consultar')
   @ApiProduces('application/pdf')
   @ApiOperation({ summary: 'Descargar la remisión en PDF' })
-  async getPdf(@Param('id', ParseUUIDPipe) id: string) {
-    const { contenido, nombre } = await this.facturasService.getFacturaPdf(id);
+  async getPdf(@Param('id', ParseUUIDPipe) id: string, @Actor() actor: Actor) {
+    const { contenido, nombre } = await this.facturasService.getFacturaPdf(id, actor);
     return archivo(contenido, nombre, 'application/pdf');
   }
 
@@ -95,8 +98,8 @@ export class FacturasVentaController {
   @RequirePermission('ventas.crear')
   @Auditar({ accion: 'ACTUALIZAR', recurso: 'facturas_venta', registrarCuerpo: true })
   @ApiOperation({ summary: 'Modificar campos no financieros (vencimiento, observaciones)' })
-  async update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateFacturaVentaDto) {
-    return this.facturasService.updateFactura(id, dto);
+  async update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateFacturaVentaDto, @Actor() actor: Actor) {
+    return this.facturasService.updateFactura(id, dto, actor);
   }
 
   @Post(':id/anular')

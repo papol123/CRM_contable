@@ -1,0 +1,21 @@
+meta {
+  name: Usuario ve cuentas por pagar del proveedor
+  type: http
+  seq: 20
+}
+
+get {
+  url: {{baseUrl}}/cuentas-por-pagar?proveedorId={{idProveedor}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

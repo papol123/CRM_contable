@@ -1,10 +1,15 @@
 const path = require('path');
-const dotenv = require('dotenv');
 const { Client } = require('pg');
 
-// Mismo orden de búsqueda que app.module.ts: backend/.env y luego la raíz
-dotenv.config({ path: path.join(__dirname, '../../.env'), quiet: true });
-dotenv.config({ path: path.join(__dirname, '../../../.env'), quiet: true });
+// Mismo orden de búsqueda que app.module.ts: backend/.env y luego la raíz.
+// En Cloud Run no hay .env (las variables vienen del servicio), así que dotenv es opcional.
+try {
+  const dotenv = require('dotenv');
+  dotenv.config({ path: path.join(__dirname, '../../.env'), quiet: true });
+  dotenv.config({ path: path.join(__dirname, '../../../.env'), quiet: true });
+} catch {
+  // sin dotenv: se usan las variables de entorno del proceso
+}
 
 function crearCliente() {
   return new Client({

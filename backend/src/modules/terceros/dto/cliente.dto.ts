@@ -160,6 +160,15 @@ export class ConsultaTercerosDto extends PaginacionDto {
   ciudadId?: string;
 }
 
+/** Búsqueda para selectores (crear venta o compra): mínimo 2 caracteres. */
+export class BusquedaTercerosDto {
+  @ApiProperty({ example: 'pistón', description: 'Documento o razón social (mínimo 2 caracteres)' })
+  @IsString()
+  @MinLength(2)
+  @MaxLength(100)
+  q: string;
+}
+
 export class HistorialComprasDto extends PaginacionDto {
   @ApiPropertyOptional({ example: '2026-01-01' })
   @IsOptional()

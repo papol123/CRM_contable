@@ -59,8 +59,14 @@ describe('Autorización (catálogo §34)', () => {
   });
 
   it('el Usuario conserva la operación diaria (no recibe 403)', async () => {
+    // Estas dos exigen filtrar por tercero sin el permiso global: se prueban aparte
+    const conFiltroObligatorio = ['GET /cuentas-por-cobrar', 'GET /cuentas-por-pagar'];
     const operativas = rutas.filter(
-      (r) => !r.publico && r.permisos.length > 0 && r.permisos.every((p) => usuario.permisos.includes(p)),
+      (r) =>
+        !r.publico &&
+        r.permisos.length > 0 &&
+        r.permisos.every((p) => usuario.permisos.includes(p)) &&
+        !conFiltroObligatorio.includes(`${r.http} ${r.ruta}`),
     );
     const rutasOperativas = operativas.map((r) => `${r.http} ${r.ruta}`);
     for (const esperada of [
@@ -74,7 +80,9 @@ describe('Autorización (catálogo §34)', () => {
       'POST /inventario/salidas',
       'POST /inventario/traslados',
       'POST /productos',
-      'GET /cartera/resumen',
+      'GET /clientes/buscar',
+      'GET /proveedores/buscar',
+      'GET /clientes/:id/cartera',
     ]) {
       expect(rutasOperativas).toContain(esperada);
     }
@@ -82,6 +90,59 @@ describe('Autorización (catálogo §34)', () => {
       const res = await llamar(app, r, usuario.token);
       expect({ ruta: `${r.http} ${r.ruta}`, status: res.status }).not.toEqual({ ruta: `${r.http} ${r.ruta}`, status: 403 });
     }
+  });
+
+  it('el Usuario no ve el directorio de terceros ni la información global (solo Administrador)', async () => {
+    for (const ruta of [
+      '/usuarios',
+      '/roles',
+      '/auditoria',
+      '/configuracion',
+      '/clientes',
+      `/clientes/${randomUUID()}`,
+      `/clientes/${randomUUID()}/telefonos`,
+      `/clientes/${randomUUID()}/correos`,
+      '/proveedores',
+      `/proveedores/${randomUUID()}`,
+      '/cartera/morosos',
+      '/cartera/vencida',
+      '/cartera/resumen',
+      '/cuentas-por-cobrar',
+      '/cuentas-por-pagar',
+      '/cuentas-por-pagar/vencidas',
+      '/dashboard/resumen',
+      '/reportes/ventas',
+      '/reportes/cartera',
+    ]) {
+      const res = await api(app).get(`/api/v1${ruta}`).set('Authorization', `Bearer ${usuario.token}`);
+      expect({ ruta, status: res.status }).toEqual({ ruta, status: 403 });
+    }
+    for (const ruta of ['/clientes', '/proveedores', '/cartera/resumen', '/cuentas-por-cobrar', '/dashboard/resumen']) {
+      const res = await api(app).get(`/api/v1${ruta}`).set('Authorization', `Bearer ${admin.token}`);
+      expect({ ruta, status: res.status }).toEqual({ ruta, status: 200 });
+    }
+  });
+
+  it('la búsqueda de clientes no expone contacto ni cupo', async () => {
+    const res = await api(app).get('/api/v1/clientes/buscar?q=a').set('Authorization', `Bearer ${usuario.token}`).expect(400);
+    expect(res.headers['content-type']).toContain('application/problem+json');
+    const { body } = await api(app).get('/api/v1/clientes/buscar?q=ta').set('Authorization', `Bearer ${usuario.token}`).expect(200);
+    expect(body.length).toBeGreaterThan(0);
+    expect(body.length).toBeLessThanOrEqual(20);
+    for (const c of body) {
+      expect(Object.keys(c).sort()).toEqual(['activo', 'creditoBloqueado', 'id', 'numeroDocumento', 'razonSocial']);
+    }
+    // Un comodín LIKE no recorre todo el directorio
+    const comodin = await api(app).get('/api/v1/clientes/buscar?q=%25%25').set('Authorization', `Bearer ${usuario.token}`).expect(200);
+    expect(comodin.body).toEqual([]);
+  });
+
+  it('cuentas por cobrar y por pagar: el Usuario debe filtrar por tercero', async () => {
+    const [cliente] = (await api(app).get('/api/v1/clientes/buscar?q=ta').set('Authorization', `Bearer ${usuario.token}`)).body;
+    await api(app).get(`/api/v1/cuentas-por-cobrar?clienteId=${cliente.id}`).set('Authorization', `Bearer ${usuario.token}`).expect(200);
+    await api(app).get('/api/v1/cuentas-por-cobrar').set('Authorization', `Bearer ${usuario.token}`).expect(403);
+    await api(app).get(`/api/v1/cuentas-por-pagar?proveedorId=${randomUUID()}`).set('Authorization', `Bearer ${usuario.token}`).expect(200);
+    await api(app).get('/api/v1/cuentas-por-pagar').set('Authorization', `Bearer ${usuario.token}`).expect(403);
   });
 
   it('ningún GET sin parámetros responde 5xx al Administrador', async () => {
@@ -100,10 +161,10 @@ describe('Autorización (catálogo §34)', () => {
 
     await api(app).patch(`/api/v1/roles/${rolVendedor.id}`).set('Authorization', `Bearer ${admin.token}`).send({ activo: false }).expect(200);
     try {
-      await api(app).get('/api/v1/clientes').set('Authorization', `Bearer ${vendedor.token}`).expect(403);
+      await api(app).get('/api/v1/clientes/buscar?q=ta').set('Authorization', `Bearer ${vendedor.token}`).expect(403);
     } finally {
       await api(app).patch(`/api/v1/roles/${rolVendedor.id}`).set('Authorization', `Bearer ${admin.token}`).send({ activo: true }).expect(200);
     }
-    await api(app).get('/api/v1/clientes').set('Authorization', `Bearer ${vendedor.token}`).expect(200);
+    await api(app).get('/api/v1/clientes/buscar?q=ta').set('Authorization', `Bearer ${vendedor.token}`).expect(200);
   });
 });

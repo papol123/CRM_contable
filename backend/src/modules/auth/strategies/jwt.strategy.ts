@@ -20,6 +20,8 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
+      // Solo HS256: rechaza tokens firmados con otro algoritmo (OWASP API2:2023)
+      algorithms: ['HS256'],
       secretOrKey: configService.getOrThrow<string>('JWT_SECRET'),
     });
   }

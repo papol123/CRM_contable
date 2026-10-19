@@ -18,6 +18,7 @@ import { RequirePermission } from '../../auth/decorators/permissions.decorator';
 import { Actor } from '../../auth/decorators/actor.decorator';
 import { Auditar } from '../../auditoria/auditar';
 import {
+  BusquedaTercerosDto,
   BloqueoCreditoDto,
   ConsultaTercerosDto,
   CreateClienteDto,
@@ -34,10 +35,20 @@ export class ClientesController {
   constructor(private readonly clientesService: ClientesService) {}
 
   @Get()
-  @RequirePermission('terceros.consultar')
-  @ApiOperation({ summary: 'Listar clientes (paginado; busca por documento o razón social)' })
+  @RequirePermission('terceros.consultar_todos')
+  @ApiOperation({ summary: 'Listar clientes con datos de contacto (paginado; busca por documento o razón social)' })
   async findAll(@Query() filtros: ConsultaTercerosDto) {
     return this.clientesService.findAll(filtros);
+  }
+
+  @Get('buscar')
+  @RequirePermission('terceros.consultar')
+  @ApiOperation({
+    summary: 'Buscar clientes para un selector (máx. 20; solo id, nombre, documento y estado)',
+    description: 'No incluye teléfonos, correos, direcciones ni cupo. El directorio completo requiere terceros.consultar_todos.',
+  })
+  async buscar(@Query() q: BusquedaTercerosDto) {
+    return this.clientesService.buscar(q.q);
   }
 
   @Post('importar')
@@ -55,7 +66,7 @@ export class ClientesController {
   }
 
   @Get(':id')
-  @RequirePermission('terceros.consultar')
+  @RequirePermission('terceros.consultar_todos')
   @ApiOperation({ summary: 'Detalle del cliente' })
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.clientesService.findById(id);
@@ -86,7 +97,7 @@ export class ClientesController {
   }
 
   @Get(':id/telefonos')
-  @RequirePermission('terceros.consultar')
+  @RequirePermission('terceros.consultar_todos')
   @ApiOperation({ summary: 'Teléfonos del cliente' })
   async findTelefonos(@Param('id', ParseUUIDPipe) id: string) {
     return this.clientesService.findTelefonos(id);
@@ -108,7 +119,7 @@ export class ClientesController {
   }
 
   @Get(':id/correos')
-  @RequirePermission('terceros.consultar')
+  @RequirePermission('terceros.consultar_todos')
   @ApiOperation({ summary: 'Correos del cliente' })
   async findCorreos(@Param('id', ParseUUIDPipe) id: string) {
     return this.clientesService.findCorreos(id);
@@ -123,7 +134,7 @@ export class ClientesController {
   }
 
   @Get(':id/historial-compras')
-  @RequirePermission('terceros.consultar')
+  @RequirePermission('terceros.consultar_todos')
   @ApiOperation({ summary: 'Historial de compras del cliente (paginado, filtrable por fechas)' })
   async findHistorialCompras(@Param('id', ParseUUIDPipe) id: string, @Query() filtros: HistorialComprasDto) {
     return this.clientesService.findHistorialCompras(id, filtros);

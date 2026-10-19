@@ -32,6 +32,7 @@ import { FacturasVentaService } from './facturas-venta.service';
 import { normalizarPaginacion, paginado } from '../../common/paginacion/paginacion';
 import { AuditoriaService } from '../auditoria/auditoria.service';
 import { Actor } from '../auth/decorators/actor.decorator';
+import { PERMISOS_GLOBALES, asegurarPropietario, filtroPropietario } from '../../common/autorizacion/propiedad';
 
 /** Único avance permitido desde cada estado con PATCH /pedidos/{id}/estado. */
 const SIGUIENTE_ESTADO: Partial<Record<EstadoPedido, EstadoPedido>> = {
@@ -60,7 +61,7 @@ export class PedidosService {
     private readonly auditoria: AuditoriaService,
   ) {}
 
-  async findAll(filtros: ConsultaPedidosDto = {}) {
+  async findAll(filtros: ConsultaPedidosDto = {}, actor?: Actor) {
     const pagina = normalizarPaginacion(filtros);
     const query = this.pedidoRepository
       .createQueryBuilder('p')
@@ -74,6 +75,9 @@ export class PedidosService {
       .skip(pagina.offset)
       .take(pagina.limit);
 
+    // Sin ventas.consultar_todos cada usuario solo ve sus pedidos (GEMINI.md §5.4)
+    const propietario = filtroPropietario(actor, PERMISOS_GLOBALES.ventas);
+    if (propietario) query.andWhere('p.idUsuario = :propietario', { propietario });
     if (filtros.estado) query.andWhere('p.estado = :estado', { estado: filtros.estado });
     if (filtros.clienteId) query.andWhere('p.idCliente = :idCliente', { idCliente: filtros.clienteId });
 
@@ -81,7 +85,7 @@ export class PedidosService {
     return paginado(pedidos.map((p) => ({ ...p, ...calcularTotales(p.detalles) })), total, pagina);
   }
 
-  async findById(id: string, manager: EntityManager = this.dataSource.manager): Promise<any> {
+  async findById(id: string, manager: EntityManager = this.dataSource.manager, actor?: Actor): Promise<any> {
     const pedido = await manager
       .getRepository(Pedido)
       .createQueryBuilder('p')
@@ -93,6 +97,7 @@ export class PedidosService {
       .where('p.id = :id', { id })
       .getOne();
     if (!pedido) throw new NotFoundException(`Pedido con ID ${id} no encontrado`);
+    asegurarPropietario(pedido.idUsuario, actor, PERMISOS_GLOBALES.ventas, `Pedido con ID ${id} no encontrado`);
 
     return {
       ...pedido,
@@ -102,9 +107,10 @@ export class PedidosService {
     };
   }
 
-  async findTrazabilidad(id: string, manager: EntityManager = this.dataSource.manager) {
-    const existe = await manager.count(Pedido, { where: { id } });
-    if (!existe) throw new NotFoundException(`Pedido con ID ${id} no encontrado`);
+  async findTrazabilidad(id: string, manager: EntityManager = this.dataSource.manager, actor?: Actor) {
+    const pedido = await manager.findOne(Pedido, { where: { id }, select: { id: true, idUsuario: true } });
+    if (!pedido) throw new NotFoundException(`Pedido con ID ${id} no encontrado`);
+    asegurarPropietario(pedido.idUsuario, actor, PERMISOS_GLOBALES.ventas, `Pedido con ID ${id} no encontrado`);
     return manager.find(HistorialEstadoPedido, {
       where: { idPedido: id },
       order: { fecha: 'ASC' },
@@ -171,9 +177,10 @@ export class PedidosService {
     return pedido.id;
   }
 
-  async updateEstado(id: string, dto: UpdateEstadoPedidoDto, idUsuario?: string): Promise<any> {
+  async updateEstado(id: string, dto: UpdateEstadoPedidoDto, actor?: Actor): Promise<any> {
+    const idUsuario = actor?.id;
     await this.dataSource.transaction(async (manager) => {
-      const pedido = await this.obtenerParaCambio(manager, id);
+      const pedido = await this.obtenerParaCambio(manager, id, actor);
       const permitido = SIGUIENTE_ESTADO[pedido.estado];
       if (dto.estado !== permitido) {
         throw new ConflictException(
@@ -185,14 +192,14 @@ export class PedidosService {
       await manager.update(Pedido, id, { estado: dto.estado });
       await this.registrarHistorial(manager, id, dto.estado, idUsuario, dto.observacion);
     });
-    return this.findById(id);
+    return this.findById(id, undefined, actor);
   }
 
   /** Genera la remisión del pedido; su reserva no cuenta contra el stock disponible. */
   async facturar(id: string, dto: FacturarPedidoDto, actor?: Actor): Promise<any> {
     const idUsuario = actor?.id;
     const idFactura = await this.dataSource.transaction(async (manager) => {
-      const pedido = await this.obtenerParaCambio(manager, id);
+      const pedido = await this.obtenerParaCambio(manager, id, actor);
 
       const idFacturaVenta = await this.facturasService.crearEnTransaccion(
         manager,
@@ -258,10 +265,11 @@ export class PedidosService {
   }
 
   /** Carga el pedido bloqueando la fila y valida que no esté en un estado final. */
-  private async obtenerParaCambio(manager: EntityManager, id: string): Promise<Pedido> {
+  private async obtenerParaCambio(manager: EntityManager, id: string, actor?: Actor): Promise<Pedido> {
     const [fila] = await manager.query(`SELECT id_pedido FROM pedidos WHERE id_pedido = $1 FOR UPDATE`, [id]);
     if (!fila) throw new NotFoundException(`Pedido con ID ${id} no encontrado`);
     const pedido = await manager.findOneOrFail(Pedido, { where: { id } });
+    asegurarPropietario(pedido.idUsuario, actor, PERMISOS_GLOBALES.ventas, `Pedido con ID ${id} no encontrado`);
     if (ESTADOS_FINALES.includes(pedido.estado)) {
       throw new ConflictException(`El pedido ${pedido.numero} ya está ${pedido.estado}`);
     }

@@ -1,0 +1,21 @@
+meta {
+  name: Usuario ve cuentas por pagar globales - 403
+  type: http
+  seq: 19
+}
+
+get {
+  url: {{baseUrl}}/cuentas-por-pagar
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+tests {
+  test("responde 403", function () {
+    expect(res.getStatus()).to.equal(403);
+  });
+}

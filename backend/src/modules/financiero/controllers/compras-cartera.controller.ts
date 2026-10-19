@@ -25,6 +25,7 @@ import { archivo } from '../../../common/archivos/respuesta-archivo';
 import { ArchivoSubido } from '../../../common/archivos/adjuntos.service';
 import { TAMANO_MAXIMO_ADJUNTO } from '../../../common/almacenamiento/almacenamiento.service';
 import { paginarArreglo } from '../../../common/paginacion/paginacion';
+import { PERMISOS_GLOBALES, exigirFiltroOPermiso } from '../../../common/autorizacion/propiedad';
 import {
   ConsultaComprasDto,
   CreateFacturaCompraDto,
@@ -57,8 +58,8 @@ export class ComprasController {
   @Get()
   @RequirePermission('compras.consultar')
   @ApiOperation({ summary: 'Listar facturas de compra con saldo (paginado; filtra por texto, proveedor y fechas)' })
-  async findAll(@Query() filtros: ConsultaComprasDto) {
-    return this.comprasService.findAll(filtros);
+  async findAll(@Query() filtros: ConsultaComprasDto, @Actor() actor: Actor) {
+    return this.comprasService.findAll(filtros, actor);
   }
 
   @Post('importar-xml')
@@ -80,8 +81,8 @@ export class ComprasController {
   @Get(':id')
   @RequirePermission('compras.consultar')
   @ApiOperation({ summary: 'Detalle de factura de compra con retenciones y saldo' })
-  async findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.comprasService.findById(id);
+  async findOne(@Param('id', ParseUUIDPipe) id: string, @Actor() actor: Actor) {
+    return this.comprasService.findById(id, actor);
   }
 
   @Post()
@@ -102,8 +103,8 @@ export class ComprasController {
   @RequirePermission('compras.crear')
   @Auditar({ accion: 'ACTUALIZAR', recurso: 'facturas_compra', registrarCuerpo: true })
   @ApiOperation({ summary: 'Editar campos no financieros (número y vencimiento)' })
-  async update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateFacturaCompraDto) {
-    return this.comprasService.update(id, dto);
+  async update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateFacturaCompraDto, @Actor() actor: Actor) {
+    return this.comprasService.update(id, dto, actor);
   }
 
   @Post(':id/adjuntos')
@@ -115,15 +116,15 @@ export class ComprasController {
   @ApiBody({ schema: { type: 'object', properties: { archivo: { type: 'string', format: 'binary' } }, required: ['archivo'] } })
   @ApiOperation({ summary: 'Subir PDF o XML de la factura del proveedor (máx. 10 MB)' })
   @ApiResponse({ status: 415, description: 'Tipo de archivo no permitido' })
-  async addAdjunto(@Param('id', ParseUUIDPipe) id: string, @UploadedFile() adjunto: ArchivoSubido) {
-    return this.comprasService.adjuntarArchivo(id, adjunto);
+  async addAdjunto(@Param('id', ParseUUIDPipe) id: string, @UploadedFile() adjunto: ArchivoSubido, @Actor() actor: Actor) {
+    return this.comprasService.adjuntarArchivo(id, adjunto, actor);
   }
 
   @Get(':id/adjuntos')
   @RequirePermission('compras.consultar')
   @ApiOperation({ summary: 'Adjuntos de la factura de compra' })
-  async getAdjuntos(@Param('id', ParseUUIDPipe) id: string) {
-    return this.comprasService.getAdjuntos(id);
+  async getAdjuntos(@Param('id', ParseUUIDPipe) id: string, @Actor() actor: Actor) {
+    return this.comprasService.getAdjuntos(id, actor);
   }
 
   @Get(':id/adjuntos/:idAdjunto')
@@ -132,8 +133,9 @@ export class ComprasController {
   async descargarAdjunto(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('idAdjunto', ParseUUIDPipe) idAdjunto: string,
+    @Actor() actor: Actor,
   ) {
-    const { contenido, nombre, tipoMime } = await this.comprasService.descargarAdjunto(id, idAdjunto);
+    const { contenido, nombre, tipoMime } = await this.comprasService.descargarAdjunto(id, idAdjunto, actor);
     return archivo(contenido, nombre, tipoMime, 'attachment');
   }
 
@@ -155,8 +157,12 @@ export class CarteraController {
 
   @Get('cuentas-por-cobrar')
   @RequirePermission('cartera.consultar')
-  @ApiOperation({ summary: 'Remisiones con saldo pendiente (paginado)' })
-  async getCuentasPorCobrar(@Query() q: ConsultaCuentasCobrarDto) {
+  @ApiOperation({
+    summary: 'Remisiones con saldo pendiente (paginado)',
+    description: 'Sin cartera.consultar_todos es obligatorio filtrar por clienteId.',
+  })
+  async getCuentasPorCobrar(@Query() q: ConsultaCuentasCobrarDto, @Actor() actor: Actor) {
+    exigirFiltroOPermiso(actor, PERMISOS_GLOBALES.cartera, q.clienteId, 'clienteId');
     return paginarArreglo(await this.carteraService.getCuentasPorCobrar(q.clienteId), q);
   }
 
@@ -177,21 +183,21 @@ export class CarteraController {
   }
 
   @Get('cartera/morosos')
-  @RequirePermission('cartera.consultar')
+  @RequirePermission('cartera.consultar_todos')
   @ApiOperation({ summary: 'Clientes con remisiones vencidas' })
   async getMorosos() {
     return this.carteraService.getMorosos();
   }
 
   @Get('cartera/vencida')
-  @RequirePermission('cartera.consultar')
+  @RequirePermission('cartera.consultar_todos')
   @ApiOperation({ summary: 'Cartera por edades de vencimiento (1-30, 31-60, 61-90, +90)' })
   async getCarteraVencida() {
     return this.carteraService.getCarteraVencida();
   }
 
   @Get('cartera/resumen')
-  @RequirePermission('cartera.consultar')
+  @RequirePermission('cartera.consultar_todos')
   @ApiOperation({ summary: 'Resumen consolidado de cartera' })
   async getCarteraResumen() {
     return this.carteraService.getCarteraResumen();
@@ -209,20 +215,24 @@ export class CarteraController {
 
   @Get('cuentas-por-pagar')
   @RequirePermission('compras.consultar')
-  @ApiOperation({ summary: 'Facturas de compra con saldo pendiente (paginado)' })
-  async getCuentasPorPagar(@Query() q: ConsultaCuentasPagarDto) {
+  @ApiOperation({
+    summary: 'Facturas de compra con saldo pendiente (paginado)',
+    description: 'Sin compras.consultar_todos es obligatorio filtrar por proveedorId.',
+  })
+  async getCuentasPorPagar(@Query() q: ConsultaCuentasPagarDto, @Actor() actor: Actor) {
+    exigirFiltroOPermiso(actor, PERMISOS_GLOBALES.compras, q.proveedorId, 'proveedorId');
     return paginarArreglo(await this.carteraService.getCuentasPorPagar(q.proveedorId), q);
   }
 
   @Get('cuentas-por-pagar/proximas-vencer')
-  @RequirePermission('compras.consultar')
+  @RequirePermission('compras.consultar_todos')
   @ApiOperation({ summary: 'Cuentas por pagar que vencen en los próximos N días' })
   async getProximasVencer(@Query() q: ProximasVencerDto) {
     return paginarArreglo(await this.carteraService.getCuentasPorPagarProximasVencer(q.dias ?? 7), q);
   }
 
   @Get('cuentas-por-pagar/vencidas')
-  @RequirePermission('compras.consultar')
+  @RequirePermission('compras.consultar_todos')
   @ApiOperation({ summary: 'Cuentas por pagar vencidas' })
   async getVencidas(@Query() q: ConsultaCuentasPagarDto) {
     return paginarArreglo(await this.carteraService.getCuentasPorPagarVencidas(), q);

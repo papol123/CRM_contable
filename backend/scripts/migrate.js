@@ -11,13 +11,20 @@ const { crearCliente } = require('./lib/db');
 const ESQUEMA_BASE = path.join(__dirname, '../../crm_contable_schema_postgresql_uuid.sql');
 const CARPETA_MIGRACIONES = path.join(__dirname, '../database/migrations');
 
+// Candado de sesión: si arrancan varias instancias de Cloud Run a la vez, solo una migra
+const CANDADO_MIGRACIONES = 'crm_contable_migraciones';
+
 async function main() {
   const client = crearCliente();
   await client.connect();
 
   try {
+    await client.query('SELECT pg_advisory_lock(hashtext($1))', [CANDADO_MIGRACIONES]);
     const { rows } = await client.query(`SELECT to_regclass('public.usuarios') AS tabla`);
     if (!rows[0].tabla) {
+      if (!fs.existsSync(ESQUEMA_BASE)) {
+        throw new Error(`Base vacía y no se encontró el esquema base (${ESQUEMA_BASE}). Ejecute npm run db:migrate desde el repositorio.`);
+      }
       console.log('📐 Base vacía: aplicando esquema base...');
       await client.query(fs.readFileSync(ESQUEMA_BASE, 'utf8'));
     }
@@ -54,6 +61,7 @@ async function main() {
         : `✅ ${pendientes} migración(es) aplicada(s).`,
     );
   } finally {
+    await client.query('SELECT pg_advisory_unlock(hashtext($1))', [CANDADO_MIGRACIONES]).catch(() => {});
     await client.end();
   }
 }

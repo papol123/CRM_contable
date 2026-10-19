@@ -1,0 +1,21 @@
+meta {
+  name: Usuario ve el dashboard global - 403
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/dashboard/resumen
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{tokenUsuario}}
+}
+
+tests {
+  test("responde 403", function () {
+    expect(res.getStatus()).to.equal(403);
+  });
+}

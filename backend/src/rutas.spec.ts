@@ -35,6 +35,34 @@ describe('Rutas registradas (catálogo §34: prueba estructural)', () => {
     expect(todas.filter((r) => /\/(admin|usuario)\/(facturas|ventas|remisiones|pagos|clientes)/.test(r.ruta))).toEqual([]);
   });
 
+  it('el directorio de terceros y las vistas globales exigen permisos *.consultar_todos (API5:2023)', () => {
+    const permisoDe = (clave: string) => todas.find((r) => `${r.http} ${r.ruta}` === clave)?.permisos;
+    const globales: Record<string, string> = {
+      'GET /clientes': 'terceros.consultar_todos',
+      'GET /clientes/:id': 'terceros.consultar_todos',
+      'GET /clientes/:id/telefonos': 'terceros.consultar_todos',
+      'GET /clientes/:id/correos': 'terceros.consultar_todos',
+      'GET /clientes/:id/historial-compras': 'terceros.consultar_todos',
+      'GET /proveedores': 'terceros.consultar_todos',
+      'GET /proveedores/:id': 'terceros.consultar_todos',
+      'GET /proveedores/:id/historial-compras': 'compras.consultar_todos',
+      'GET /cartera/morosos': 'cartera.consultar_todos',
+      'GET /cartera/vencida': 'cartera.consultar_todos',
+      'GET /cartera/resumen': 'cartera.consultar_todos',
+      'GET /reportes/cartera': 'cartera.consultar_todos',
+      'GET /cuentas-por-pagar/proximas-vencer': 'compras.consultar_todos',
+      'GET /cuentas-por-pagar/vencidas': 'compras.consultar_todos',
+      'GET /dashboard/resumen': 'ventas.consultar_todos',
+      'GET /reportes/ventas': 'ventas.consultar_todos',
+    };
+    for (const [clave, permiso] of Object.entries(globales)) {
+      expect({ clave, permisos: permisoDe(clave) }).toEqual({ clave, permisos: [permiso] });
+    }
+    // Búsqueda liviana para operar sin el directorio completo
+    expect(permisoDe('GET /clientes/buscar')).toEqual(['terceros.consultar']);
+    expect(permisoDe('GET /proveedores/buscar')).toEqual(['terceros.consultar']);
+  });
+
   it('la auditoría es de solo lectura (sin POST/PATCH/DELETE salvo exportar)', () => {
     const escrituras = todas.filter((r) => r.ruta.startsWith('/auditoria') && r.http !== 'GET');
     expect(escrituras.map((r) => `${r.http} ${r.ruta}`)).toEqual(['POST /auditoria/exportar']);

@@ -46,13 +46,13 @@ script:pre-request {
       return res.data.accessToken;
     }
 
-    await asegurarToken("tokenAdmin", "admin@crmcontable.com");
+    const tokenAdmin = await asegurarToken("tokenAdmin", "admin@crmcontable.com");
     const tokenUsuario = await asegurarToken("tokenUsuario", "usuario@crmcontable.com");
     await asegurarToken("tokenVendedor", "vendedor@crmcontable.com");
 
     if (!leer("idProducto") || !leer("idCliente") || !leer("idProveedor")) {
-      const get = async (ruta) => {
-        const r = await bru.sendRequest({ method: "GET", url: base + ruta, headers: { Authorization: "Bearer " + tokenUsuario } });
+      const get = async (ruta, token = tokenUsuario) => {
+        const r = await bru.sendRequest({ method: "GET", url: base + ruta, headers: { Authorization: "Bearer " + token } });
         if (r.status !== 200) throw new Error("GET " + ruta + " respondió " + r.status);
         return r.data;
       };
@@ -67,11 +67,12 @@ script:pre-request {
       guardar("idMetodoPago", (await get("/medios-pago"))[0].id);
       guardar("idCategoriaGasto", (await get("/categorias-gasto"))[0].id);
       guardar("idTipoDocumento", (await get("/tipos-documento"))[0].id);
-      const cliente = (await get("/clientes?limit=50")).data.find((c) => c.tercero.activo);
+      // El directorio completo de terceros es del Administrador (terceros.consultar_todos)
+      const cliente = (await get("/clientes?limit=50", tokenAdmin)).data.find((c) => c.tercero.activo);
       guardar("idCliente", cliente.id);
       guardar("documentoCliente", cliente.tercero.numeroDocumento);
       guardar("idTipoDocCliente", cliente.tercero.idTipoDocumento);
-      guardar("idProveedor", (await get("/proveedores?limit=50")).data.find((p) => p.tercero.activo).id);
+      guardar("idProveedor", (await get("/proveedores?limit=50", tokenAdmin)).data.find((p) => p.tercero.activo).id);
     }
   }
 }

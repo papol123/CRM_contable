@@ -235,6 +235,11 @@ module.exports = {
     { modulo: 'nomina', codigo: 'nomina.consultar', nombre: 'Consultar nómina', descripcion: 'Ver liquidaciones y periodos de nómina' },
     { modulo: 'nomina', codigo: 'nomina.gestionar', nombre: 'Gestionar nómina', descripcion: 'Liquidar y autorizar pagos de nómina' },
     { modulo: 'mantenimiento', codigo: 'mantenimiento.gestionar', nombre: 'Operación y mantenimiento', descripcion: 'Ver métricas, jobs, backups y almacenamiento' },
+    // Consulta global (GEMINI.md §5.4): sin estos permisos cada usuario solo ve lo propio
+    { modulo: 'terceros', codigo: 'terceros.consultar_todos', nombre: 'Consultar directorio de terceros', descripcion: 'Listar clientes y proveedores con teléfonos, correos, direcciones e historial (sin él, solo búsqueda por nombre o documento)' },
+    { modulo: 'ventas', codigo: 'ventas.consultar_todos', nombre: 'Consultar todas las ventas', descripcion: 'Ver remisiones, cotizaciones y pedidos de cualquier usuario, el resumen del dashboard y el reporte de ventas (sin él, solo los propios)' },
+    { modulo: 'compras', codigo: 'compras.consultar_todos', nombre: 'Consultar todas las compras', descripcion: 'Ver facturas de compra de cualquier usuario y las cuentas por pagar globales (sin él, solo las propias o por proveedor)' },
+    { modulo: 'cartera', codigo: 'cartera.consultar_todos', nombre: 'Consultar cartera global', descripcion: 'Ver morosos, cartera vencida, resumen y reporte de cartera, y cuentas por cobrar sin filtrar por cliente' },
   ],
 
   permisosPorRol: {
@@ -251,7 +256,9 @@ module.exports = {
     CAJERO: [
       'pagos.registrar',
       'ventas.consultar',
+      'ventas.consultar_todos',
       'cartera.consultar',
+      'cartera.consultar_todos',
       'terceros.consultar',
       'reportes.exportar',
     ],
@@ -259,6 +266,7 @@ module.exports = {
       'inventario.consultar',
       'inventario.movimientos',
       'compras.consultar',
+      'compras.consultar_todos',
       'reportes.exportar',
     ],
     COMPRAS: [

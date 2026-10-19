@@ -41,9 +41,9 @@ const CONFIG_DASHBOARD_POR_DEFECTO = { graficas: ['ventas_mes', 'top_productos',
 
 /** Permiso necesario para exportar cada reporte (mismo que para consultarlo). */
 const PERMISO_REPORTE: Record<TipoReporte, string> = {
-  ventas: 'ventas.consultar',
+  ventas: 'ventas.consultar_todos',
   inventario: 'inventario.consultar',
-  cartera: 'cartera.consultar',
+  cartera: 'cartera.consultar_todos',
   compras: 'reportes.financieros',
   gastos: 'gastos.consultar_todos',
   utilidad: 'reportes.financieros',

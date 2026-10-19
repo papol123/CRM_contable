@@ -18,6 +18,8 @@ import {
   ConvertirCotizacionDto,
 } from './dto/ventas-documentos.dto';
 import { ItemFacturaVentaDto } from './dto/factura-venta.dto';
+import { Actor } from '../auth/decorators/actor.decorator';
+import { PERMISOS_GLOBALES, asegurarPropietario, filtroPropietario } from '../../common/autorizacion/propiedad';
 import { calcularLinea, calcularTotales } from '../../common/documentos/totales';
 import { fechaHoy, sumarDias } from '../../common/utils/fechas';
 import { PedidosService } from './pedidos.service';
@@ -65,7 +67,7 @@ export class CotizacionesService implements OnModuleInit {
     });
   }
 
-  async findAll(filtros: ConsultaCotizacionesDto = {}) {
+  async findAll(filtros: ConsultaCotizacionesDto = {}, actor?: Actor) {
     const pagina = normalizarPaginacion(filtros);
     const query = this.cotizacionRepository
       .createQueryBuilder('c')
@@ -78,6 +80,9 @@ export class CotizacionesService implements OnModuleInit {
       .skip(pagina.offset)
       .take(pagina.limit);
 
+    // Sin ventas.consultar_todos cada usuario solo ve sus cotizaciones (GEMINI.md §5.4)
+    const propietario = filtroPropietario(actor, PERMISOS_GLOBALES.ventas);
+    if (propietario) query.andWhere('c.idUsuario = :propietario', { propietario });
     if (filtros.estado) query.andWhere('c.estado = :estado', { estado: filtros.estado });
     if (filtros.clienteId) query.andWhere('c.idCliente = :idCliente', { idCliente: filtros.clienteId });
 
@@ -85,8 +90,8 @@ export class CotizacionesService implements OnModuleInit {
     return paginado(cotizaciones.map((c) => this.conTotales(c)), total, pagina);
   }
 
-  async findById(id: string): Promise<any> {
-    return this.conTotales(await this.obtener(id));
+  async findById(id: string, actor?: Actor): Promise<any> {
+    return this.conTotales(await this.obtener(id, this.dataSource.manager, actor));
   }
 
   async create(dto: CreateCotizacionDto, idUsuario?: string): Promise<any> {
@@ -123,9 +128,9 @@ export class CotizacionesService implements OnModuleInit {
     return this.findById(id);
   }
 
-  async update(id: string, dto: UpdateCotizacionDto): Promise<any> {
+  async update(id: string, dto: UpdateCotizacionDto, actor?: Actor): Promise<any> {
     await this.dataSource.transaction(async (manager) => {
-      const cotizacion = await this.obtener(id, manager);
+      const cotizacion = await this.obtener(id, manager, actor);
       if (cotizacion.estado !== 'BORRADOR') {
         throw new ConflictException(`Solo se editan cotizaciones en BORRADOR (estado actual: ${cotizacion.estado})`);
       }
@@ -139,30 +144,31 @@ export class CotizacionesService implements OnModuleInit {
         await this.guardarItems(manager, id, dto.items);
       }
     });
-    return this.findById(id);
+    return this.findById(id, actor);
   }
 
-  async aprobar(id: string): Promise<any> {
-    const cotizacion = await this.obtener(id);
+  async aprobar(id: string, actor?: Actor): Promise<any> {
+    const cotizacion = await this.obtener(id, this.dataSource.manager, actor);
     this.validarVigenteConItems(cotizacion, ['BORRADOR']);
     await this.cotizacionRepository.update(id, { estado: 'APROBADA' });
-    return this.findById(id);
+    return this.findById(id, actor);
   }
 
-  async rechazar(id: string, motivo: string): Promise<any> {
-    const cotizacion = await this.obtener(id);
+  async rechazar(id: string, motivo: string, actor?: Actor): Promise<any> {
+    const cotizacion = await this.obtener(id, this.dataSource.manager, actor);
     if (!['BORRADOR', 'APROBADA'].includes(cotizacion.estado)) {
       throw new ConflictException(`No se puede rechazar una cotización en estado ${cotizacion.estado}`);
     }
     await this.cotizacionRepository.update(id, { estado: 'RECHAZADA', motivoRechazo: motivo });
-    return this.findById(id);
+    return this.findById(id, actor);
   }
 
   /** Genera un pedido con los items de la cotización y reserva el stock. */
-  async convertirAPedido(id: string, dto: ConvertirCotizacionDto, idUsuario?: string): Promise<any> {
+  async convertirAPedido(id: string, dto: ConvertirCotizacionDto, actor?: Actor): Promise<any> {
+    const idUsuario = actor?.id;
     const idPedido = await this.dataSource.transaction(async (manager) => {
       await manager.query(`SELECT 1 FROM cotizaciones WHERE id_cotizacion = $1 FOR UPDATE`, [id]);
-      const cotizacion = await this.obtener(id, manager);
+      const cotizacion = await this.obtener(id, manager, actor);
       this.validarVigenteConItems(cotizacion, ['BORRADOR', 'APROBADA']);
 
       const pedidoId = await this.pedidosService.crearEnTransaccion(
@@ -187,13 +193,13 @@ export class CotizacionesService implements OnModuleInit {
     });
 
     return {
-      cotizacion: await this.findById(id),
-      pedido: await this.pedidosService.findById(idPedido),
+      cotizacion: await this.findById(id, actor),
+      pedido: await this.pedidosService.findById(idPedido, undefined, actor),
     };
   }
 
-  async generarPdf(id: string) {
-    const c = await this.findById(id);
+  async generarPdf(id: string, actor?: Actor) {
+    const c = await this.findById(id, actor);
     const t = c.cliente?.tercero;
     const contenido = await this.pdf.documento({
       titulo: 'Cotización',
@@ -234,8 +240,9 @@ export class CotizacionesService implements OnModuleInit {
   }
 
   /** Encola el envío por correo; responde de inmediato con el job (202). */
-  async enviarPdf(id: string, destinatario: string | undefined, idUsuario: string) {
-    const cotizacion = await this.findById(id);
+  async enviarPdf(id: string, destinatario: string | undefined, actor: Actor) {
+    const idUsuario = actor.id;
+    const cotizacion = await this.findById(id, actor);
     if (cotizacion.estado === 'RECHAZADA') {
       throw new ConflictException('No se envía una cotización rechazada');
     }
@@ -273,12 +280,13 @@ export class CotizacionesService implements OnModuleInit {
     }
   }
 
-  private async obtener(id: string, manager: EntityManager = this.dataSource.manager): Promise<Cotizacion> {
+  private async obtener(id: string, manager: EntityManager = this.dataSource.manager, actor?: Actor): Promise<Cotizacion> {
     const cotizacion = await manager.findOne(Cotizacion, {
       where: { id },
       relations: { cliente: { tercero: { emails: true, telefonos: true } } },
     });
     if (!cotizacion) throw new NotFoundException(`Cotización con ID ${id} no encontrada`);
+    asegurarPropietario(cotizacion.idUsuario, actor, PERMISOS_GLOBALES.ventas, `Cotización con ID ${id} no encontrada`);
     return cotizacion;
   }
 

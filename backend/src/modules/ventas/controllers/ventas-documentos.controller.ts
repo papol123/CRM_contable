@@ -44,23 +44,23 @@ export class CotizacionesController {
   @Get()
   @RequirePermission('ventas.consultar')
   @ApiOperation({ summary: 'Listar cotizaciones (paginado, filtra por estado y cliente)' })
-  async findAll(@Query() filtros: ConsultaCotizacionesDto) {
-    return this.cotizacionesService.findAll(filtros);
+  async findAll(@Query() filtros: ConsultaCotizacionesDto, @Actor() actor: Actor) {
+    return this.cotizacionesService.findAll(filtros, actor);
   }
 
   @Get(':id')
   @RequirePermission('ventas.consultar')
   @ApiOperation({ summary: 'Detalle de cotización con totales' })
-  async findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.cotizacionesService.findById(id);
+  async findOne(@Param('id', ParseUUIDPipe) id: string, @Actor() actor: Actor) {
+    return this.cotizacionesService.findById(id, actor);
   }
 
   @Get(':id/pdf')
   @RequirePermission('ventas.consultar')
   @ApiProduces('application/pdf')
   @ApiOperation({ summary: 'Descargar la cotización en PDF' })
-  async getPdf(@Param('id', ParseUUIDPipe) id: string) {
-    const { contenido, nombre } = await this.cotizacionesService.generarPdf(id);
+  async getPdf(@Param('id', ParseUUIDPipe) id: string, @Actor() actor: Actor) {
+    const { contenido, nombre } = await this.cotizacionesService.generarPdf(id, actor);
     return archivo(contenido, nombre, 'application/pdf');
   }
 
@@ -76,8 +76,8 @@ export class CotizacionesController {
   @RequirePermission('ventas.crear')
   @ApiOperation({ summary: 'Editar cotización (solo en BORRADOR; una aprobada no se edita)' })
   @ApiResponse({ status: 409, description: 'La cotización no está en BORRADOR' })
-  async update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateCotizacionDto) {
-    return this.cotizacionesService.update(id, dto);
+  async update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateCotizacionDto, @Actor() actor: Actor) {
+    return this.cotizacionesService.update(id, dto, actor);
   }
 
   @Post(':id/aprobar')
@@ -85,8 +85,8 @@ export class CotizacionesController {
   @RequirePermission('ventas.crear')
   @Auditar({ accion: 'APROBAR', recurso: 'cotizaciones' })
   @ApiOperation({ summary: 'Aprobar cotización' })
-  async aprobar(@Param('id', ParseUUIDPipe) id: string) {
-    return this.cotizacionesService.aprobar(id);
+  async aprobar(@Param('id', ParseUUIDPipe) id: string, @Actor() actor: Actor) {
+    return this.cotizacionesService.aprobar(id, actor);
   }
 
   @Post(':id/enviar')
@@ -98,8 +98,8 @@ export class CotizacionesController {
   })
   @ApiResponse({ status: 202, description: 'Envío encolado' })
   @ApiResponse({ status: 422, description: 'Cliente sin correo o correo no configurado' })
-  async enviar(@Param('id', ParseUUIDPipe) id: string, @Body() dto: EnviarCotizacionDto, @CurrentUser('id') idUsuario: string) {
-    return this.cotizacionesService.enviarPdf(id, dto.email, idUsuario);
+  async enviar(@Param('id', ParseUUIDPipe) id: string, @Body() dto: EnviarCotizacionDto, @Actor() actor: Actor) {
+    return this.cotizacionesService.enviarPdf(id, dto.email, actor);
   }
 
   @Post(':id/rechazar')
@@ -107,8 +107,8 @@ export class CotizacionesController {
   @RequirePermission('ventas.crear')
   @Auditar({ accion: 'RECHAZAR', recurso: 'cotizaciones' })
   @ApiOperation({ summary: 'Rechazar cotización con motivo' })
-  async rechazar(@Param('id', ParseUUIDPipe) id: string, @Body() dto: RechazarCotizacionDto) {
-    return this.cotizacionesService.rechazar(id, dto.motivo);
+  async rechazar(@Param('id', ParseUUIDPipe) id: string, @Body() dto: RechazarCotizacionDto, @Actor() actor: Actor) {
+    return this.cotizacionesService.rechazar(id, dto.motivo, actor);
   }
 
   @Post(':id/convertir-pedido')
@@ -120,9 +120,9 @@ export class CotizacionesController {
   async convertir(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ConvertirCotizacionDto,
-    @CurrentUser('id') idUsuario: string,
+    @Actor() actor: Actor,
   ) {
-    return this.cotizacionesService.convertirAPedido(id, dto, idUsuario);
+    return this.cotizacionesService.convertirAPedido(id, dto, actor);
   }
 }
 
@@ -135,22 +135,22 @@ export class PedidosController {
   @Get()
   @RequirePermission('ventas.consultar')
   @ApiOperation({ summary: 'Listar pedidos (paginado, filtra por estado y cliente)' })
-  async findAll(@Query() filtros: ConsultaPedidosDto) {
-    return this.pedidosService.findAll(filtros);
+  async findAll(@Query() filtros: ConsultaPedidosDto, @Actor() actor: Actor) {
+    return this.pedidosService.findAll(filtros, actor);
   }
 
   @Get(':id')
   @RequirePermission('ventas.consultar')
   @ApiOperation({ summary: 'Detalle del pedido con trazabilidad' })
-  async findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.pedidosService.findById(id);
+  async findOne(@Param('id', ParseUUIDPipe) id: string, @Actor() actor: Actor) {
+    return this.pedidosService.findById(id, undefined, actor);
   }
 
   @Get(':id/trazabilidad')
   @RequirePermission('ventas.consultar')
   @ApiOperation({ summary: 'Historial de estados del pedido' })
-  async trazabilidad(@Param('id', ParseUUIDPipe) id: string) {
-    return this.pedidosService.findTrazabilidad(id);
+  async trazabilidad(@Param('id', ParseUUIDPipe) id: string, @Actor() actor: Actor) {
+    return this.pedidosService.findTrazabilidad(id, undefined, actor);
   }
 
   @Post()
@@ -169,9 +169,9 @@ export class PedidosController {
   async updateEstado(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateEstadoPedidoDto,
-    @CurrentUser('id') idUsuario: string,
+    @Actor() actor: Actor,
   ) {
-    return this.pedidosService.updateEstado(id, dto, idUsuario);
+    return this.pedidosService.updateEstado(id, dto, actor);
   }
 
   @Post(':id/facturar')

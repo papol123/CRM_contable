@@ -175,6 +175,49 @@ describe('Segregación de funciones y restricción de tokens por cargo (Least Pr
     });
   });
 
+  describe('Denegación por defecto (OWASP Authorization Cheat Sheet · Deny by Default)', () => {
+    it('una ruta sin permiso declarado responde 403 aunque el usuario tenga sesión', () => {
+      const ctx = mockContext(base.permisosPorRol.USUARIO, undefined);
+      expect(() => guard.canActivate(ctx)).toThrow(ForbiddenException);
+      expect(auditoriaService.registrar).toHaveBeenCalledWith(
+        expect.objectContaining({ accion: 'ACCESO_DENEGADO', resultado: 'FALLO' }),
+      );
+    });
+
+    it('@Public y @Autenticado siguen sin exigir permisos', () => {
+      const ctx = mockContext([], undefined);
+      const get = jest.spyOn(reflector, 'get');
+      get.mockImplementation((clave: any) => clave === 'isPublic');
+      expect(guard.canActivate(ctx)).toBe(true);
+      get.mockImplementation((clave: any) => clave === 'soloAutenticado');
+      expect(guard.canActivate(ctx)).toBe(true);
+    });
+  });
+
+  describe('Rol USUARIO (operativo general): solo lo propio, sin consulta global', () => {
+    const permisosUsuario = base.permisosPorRol.USUARIO;
+
+    it.each(['terceros.consultar_todos', 'ventas.consultar_todos', 'compras.consultar_todos', 'cartera.consultar_todos', 'usuarios.gestionar'])(
+      'no tiene %s',
+      (permiso) => {
+        expect(permisosUsuario).not.toContain(permiso);
+        const ctx = mockContext(permisosUsuario, [permiso]);
+        expect(() => guard.canActivate(ctx)).toThrow(ForbiddenException);
+      },
+    );
+
+    it('el seed base declara los permisos globales y ningún rol operativo los recibe por defecto salvo tesorería y bodega', () => {
+      const codigos = base.permisos.map((p: any) => p.codigo);
+      for (const p of ['terceros.consultar_todos', 'ventas.consultar_todos', 'compras.consultar_todos', 'cartera.consultar_todos']) {
+        expect(codigos).toContain(p);
+      }
+      expect(base.permisosPorRol.VENDEDOR.some((p: string) => p.endsWith('.consultar_todos'))).toBe(false);
+      expect(base.permisosPorRol.COMPRAS.some((p: string) => p.endsWith('.consultar_todos'))).toBe(false);
+      expect(base.permisosPorRol.CAJERO).toEqual(expect.arrayContaining(['ventas.consultar_todos', 'cartera.consultar_todos']));
+      expect(base.permisosPorRol.BODEGA).toContain('compras.consultar_todos');
+    });
+  });
+
   describe('Auditoría estricta de violaciones de permisos (RFC 9457 / OWASP A09)', () => {
     it('genera evento de ACCESO_DENEGADO con IP, ruta y permisos faltantes', () => {
       const ctx = mockContext(['ventas.consultar'], ['ventas.anular']);

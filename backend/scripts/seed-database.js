@@ -305,6 +305,14 @@ async function seedSeguridad(ciudades) {
 
   if (base.permisosPorRol) {
     for (const [codRol, codPermisos] of Object.entries(base.permisosPorRol)) {
+      // Sincroniza: retira lo que el rol acumuló por fuera de su lista (privilege creep, OWASP A01)
+      await client.query(
+        `DELETE FROM roles_permisos rp
+          USING roles r, permisos p
+          WHERE rp.id_rol = r.id_rol AND rp.id_permiso = p.id_permiso
+            AND r.codigo = $2 AND NOT (p.codigo = ANY($1))`,
+        [codPermisos, codRol],
+      );
       const res = await client.query(
         `INSERT INTO roles_permisos (id_rol, id_permiso)
          SELECT r.id_rol, p.id_permiso FROM roles r JOIN permisos p ON p.codigo = ANY($1)

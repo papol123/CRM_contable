@@ -33,7 +33,8 @@ describe('Flujos críticos', () => {
     usuario = (await login(app, 'usuario@crmcontable.com')).token;
     vendedor = (await login(app, 'vendedor@crmcontable.com')).token;
 
-    cliente = (await get('/clientes?limit=100', usuario)).body.data.find((c: any) => c.tercero.activo);
+    // El directorio completo (con cupo y contacto) es del Administrador
+    cliente = (await get('/clientes?limit=100', admin)).body.data.find((c: any) => c.tercero.activo);
     const productos = (await get('/productos?limit=100', usuario)).body.data;
     producto = productos.find((p: any) => p.saldoActual > 10 && p.manejaInventario && p.activo);
     bodega = (await get('/bodegas', usuario)).body[0];
@@ -58,6 +59,25 @@ describe('Flujos críticos', () => {
       expect(kardex.some((m: any) => m.origenId === res.body.id && m.tipo === 'SALIDA')).toBe(true);
       const bitacora = (await get(`/auditoria/facturas_venta/${res.body.id}`, admin)).body.data;
       expect(bitacora.map((b: any) => b.accion)).toContain('CREAR');
+    });
+
+    it('ventas propias (§5.4 · API1:2023): otro vendedor no ve ni modifica la remisión (404); el Administrador sí', async () => {
+      const { body: propia } = await post('/facturas-venta', usuario, venta()).expect(201);
+
+      await get(`/facturas-venta/${propia.id}`, vendedor).expect(404);
+      await get(`/facturas-venta/${propia.id}/pdf`, vendedor).expect(404);
+      await patch(`/facturas-venta/${propia.id}`, vendedor, { observaciones: 'ajena' }).expect(404);
+      const listaVendedor = (await get('/facturas-venta?limit=100', vendedor)).body.data.map((f: any) => f.id);
+      expect(listaVendedor).not.toContain(propia.id);
+
+      await get(`/facturas-venta/${propia.id}`, usuario).expect(200);
+      expect((await get('/facturas-venta?limit=100', usuario)).body.data.map((f: any) => f.id)).toContain(propia.id);
+      await get(`/facturas-venta/${propia.id}`, admin).expect(200);
+
+      const { body: cotizacion } = await post('/cotizaciones', usuario, { idCliente: cliente.id, items: venta().items }).expect(201);
+      await get(`/cotizaciones/${cotizacion.id}`, vendedor).expect(404);
+      await post(`/cotizaciones/${cotizacion.id}/aprobar`, vendedor, {}).expect(404);
+      await get(`/cotizaciones/${cotizacion.id}`, admin).expect(200);
     });
 
     it('Idempotency-Key: el reintento devuelve la misma remisión y otro cuerpo da 422', async () => {
@@ -109,7 +129,8 @@ describe('Flujos críticos', () => {
     let compra: any;
 
     it('registra la compra con descuento, ReteFuente, ReteIVA y ReteICA', async () => {
-      const proveedor = (await get('/proveedores?limit=50', usuario)).body.data.find((p: any) => p.tercero.activo);
+      // El directorio completo es del Administrador; el Usuario compra con el id que este le da
+      const proveedor = (await get('/proveedores?limit=50', admin)).body.data.find((p: any) => p.tercero.activo);
       const res = await post(
         '/facturas-compra',
         usuario,
@@ -242,7 +263,9 @@ describe('Flujos críticos', () => {
     });
 
     it('un job de exportación ajeno no se expone (404)', async () => {
-      const job = (await post('/reportes/exportar', usuario, { tipo: 'ventas' }).expect(202)).body;
+      // El reporte de ventas es global (ventas.consultar_todos); el de inventario es operativo
+      await post('/reportes/exportar', usuario, { tipo: 'ventas' }).expect(403);
+      const job = (await post('/reportes/exportar', usuario, { tipo: 'inventario' }).expect(202)).body;
       await procesarJobs(app);
       expect((await get(`/reportes/jobs/${job.jobId}`, usuario)).body.estado).toBe('COMPLETADO');
       await get(`/reportes/jobs/${job.jobId}`, vendedor).expect(404);
