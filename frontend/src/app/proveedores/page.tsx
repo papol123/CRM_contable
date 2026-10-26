@@ -23,6 +23,12 @@ import { api, ApiError, ProblemDetails } from '@/lib/api';
 import { can, getCurrentUser } from '@/lib/auth';
 import { formatCOP, cleanIdentification } from '@/lib/format';
 
+interface TipoDocumento {
+  id: string;
+  codigo: string;
+  nombre: string;
+}
+
 interface Proveedor {
   id: string;
   tercero?: {
@@ -47,9 +53,21 @@ export default function ProveedoresPage() {
 
   // Estados modal nuevo proveedor
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [newTipoDoc, setNewTipoDoc] = useState('');
   const [newNumDoc, setNewNumDoc] = useState('');
   const [newRazonSocial, setNewRazonSocial] = useState('');
+  const [newTipoPersona, setNewTipoPersona] = useState<'NATURAL' | 'JURIDICA'>('JURIDICA');
+  const [newTelefono, setNewTelefono] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+  const [newDiasPlazo, setNewDiasPlazo] = useState('30');
+  const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
   const [createError, setCreateError] = useState<ProblemDetails | null>(null);
+
+  // Catálogo de tipos de documento
+  const { data: tiposDocumento = [] } = useQuery<TipoDocumento[]>({
+    queryKey: ['tipos-documento'],
+    queryFn: () => api<TipoDocumento[]>('/tipos-documento'),
+  });
 
   // Consulta de proveedores
   const {
@@ -77,14 +95,39 @@ export default function ProveedoresPage() {
     enabled: !!selectedProveedor?.id,
   });
 
+  // Detección de duplicados al salir del campo
+  const handleBlurDoc = async () => {
+    if (!newNumDoc.trim()) return;
+    try {
+      const match = await api<Proveedor[]>(`/proveedores/buscar?q=${encodeURIComponent(newNumDoc.trim())}`);
+      if (match && match.length > 0) {
+        setDuplicateWarning(`El documento ${newNumDoc} ya existe en el sistema para "${match[0].razonSocial || match[0].tercero?.razonSocial}".`);
+      } else {
+        setDuplicateWarning(null);
+      }
+    } catch {
+      // Ignorar fallo de búsqueda en blur
+    }
+  };
+
   // Crear proveedor
   const createMutation = useMutation({
     mutationFn: async () => {
+      const tipoDocId =
+        newTipoDoc ||
+        tiposDocumento.find((t) => t.codigo === 'NIT')?.id ||
+        tiposDocumento[0]?.id;
+
       return api('/proveedores', {
         method: 'POST',
         body: JSON.stringify({
+          idTipoDocumento: tipoDocId,
           numeroDocumento: cleanIdentification(newNumDoc),
           razonSocial: newRazonSocial.trim(),
+          tipoPersona: newTipoPersona,
+          ...(newTelefono.trim() ? { telefono: newTelefono.trim() } : {}),
+          ...(newEmail.trim() ? { email: newEmail.trim() } : {}),
+          ...(newDiasPlazo ? { diasPlazo: parseInt(newDiasPlazo, 10) } : {}),
         }),
       });
     },
@@ -93,6 +136,11 @@ export default function ProveedoresPage() {
       setIsCreateOpen(false);
       setNewNumDoc('');
       setNewRazonSocial('');
+      setNewTelefono('');
+      setNewEmail('');
+      setNewDiasPlazo('30');
+      setDuplicateWarning(null);
+      setCreateError(null);
       queryClient.invalidateQueries({ queryKey: ['proveedores'] });
     },
     onError: (err: any) => {
@@ -258,7 +306,7 @@ export default function ProveedoresPage() {
           isOpen={isCreateOpen}
           onClose={() => setIsCreateOpen(false)}
           title="Nuevo Proveedor"
-          subtitle="Registra los datos de identificación fiscal"
+          subtitle="Registra los datos de identificación fiscal y contacto"
           footer={
             <div className="flex items-center gap-2">
               <Button variant="ghost" onClick={() => setIsCreateOpen(false)}>
@@ -276,7 +324,45 @@ export default function ProveedoresPage() {
           }
         >
           {createError && <BannerError error={createError} status={createError.status} />}
+          {duplicateWarning && (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-md text-amber-800 text-xs flex items-center gap-2">
+              <span className="font-semibold">Atención:</span> {duplicateWarning}
+            </div>
+          )}
           <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-[#0f172a] uppercase tracking-wider">
+                  Tipo Documento *
+                </label>
+                <select
+                  value={newTipoDoc}
+                  onChange={(e) => setNewTipoDoc(e.target.value)}
+                  className="w-full h-[38px] px-3 bg-white text-xs border border-[#e2e8f0] rounded-md focus:border-[#1d63ed]"
+                >
+                  {tiposDocumento.map((td) => (
+                    <option key={td.id} value={td.id}>
+                      {td.codigo} — {td.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-[#0f172a] uppercase tracking-wider">
+                  Tipo Persona *
+                </label>
+                <select
+                  value={newTipoPersona}
+                  onChange={(e) => setNewTipoPersona(e.target.value as any)}
+                  className="w-full h-[38px] px-3 bg-white text-xs border border-[#e2e8f0] rounded-md focus:border-[#1d63ed]"
+                >
+                  <option value="JURIDICA">Persona Jurídica (Empresa)</option>
+                  <option value="NATURAL">Persona Natural</option>
+                </select>
+              </div>
+            </div>
+
             <Input
               label="NIT o Documento de Identificación *"
               type="text"
@@ -284,6 +370,8 @@ export default function ProveedoresPage() {
               placeholder="Ej. 900876543"
               value={newNumDoc}
               onChange={(e) => setNewNumDoc(cleanIdentification(e.target.value))}
+              onBlur={handleBlurDoc}
+              helperText="Detecta duplicados proactivamente al salir del campo"
             />
             <Input
               label="Razón Social o Nombre del Proveedor *"
@@ -292,6 +380,32 @@ export default function ProveedoresPage() {
               placeholder="Ej. Importadora y Frenos del Valle S.A.S."
               value={newRazonSocial}
               onChange={(e) => setNewRazonSocial(e.target.value)}
+            />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Input
+                label="Teléfono de Contacto"
+                type="text"
+                placeholder="Ej. 6013456789"
+                value={newTelefono}
+                onChange={(e) => setNewTelefono(e.target.value)}
+              />
+              <Input
+                label="Correo Electrónico"
+                type="email"
+                placeholder="ventas@proveedor.com"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+              />
+            </div>
+
+            <Input
+              label="Días de Plazo de Pago"
+              type="number"
+              placeholder="30"
+              value={newDiasPlazo}
+              onChange={(e) => setNewDiasPlazo(e.target.value)}
+              helperText="Días pactados para cuentas por pagar (opcional, por defecto 30)"
             />
           </div>
         </Modal>
