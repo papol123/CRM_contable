@@ -16,10 +16,10 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PATRON_DOCUMENTO } from './cliente.dto';
 
 export class CreateProveedorDto {
-  @ApiProperty({ example: 'a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d', description: 'UUID de tipo de documento' })
-  @IsNotEmpty()
+  @ApiPropertyOptional({ example: 'a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d', description: 'UUID de tipo de documento (por defecto NIT)' })
+  @IsOptional()
   @IsUUID('4')
-  idTipoDocumento: string;
+  idTipoDocumento?: string;
 
   @ApiProperty({ example: '900123456-1', description: 'NIT o documento único' })
   @IsNotEmpty()
@@ -33,10 +33,10 @@ export class CreateProveedorDto {
   @MaxLength(200)
   razonSocial: string;
 
-  @ApiProperty({ example: 'JURIDICA', enum: ['NATURAL', 'JURIDICA'] })
-  @IsNotEmpty()
+  @ApiPropertyOptional({ example: 'JURIDICA', enum: ['NATURAL', 'JURIDICA'], description: 'Por defecto JURIDICA' })
+  @IsOptional()
   @IsIn(['NATURAL', 'JURIDICA'])
-  tipoPersona: 'NATURAL' | 'JURIDICA';
+  tipoPersona?: 'NATURAL' | 'JURIDICA';
 
   @ApiPropertyOptional({ example: 'a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d' })
   @IsOptional()

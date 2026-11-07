@@ -111,6 +111,24 @@ export class ProveedoresService {
       );
     }
 
+    if (!dto.tipoPersona) {
+      dto.tipoPersona = 'JURIDICA';
+    }
+
+    if (!dto.idTipoDocumento) {
+      const [tipoNit] = await this.dataSource.query(
+        `SELECT id_tipo_documento FROM tipos_documento WHERE codigo = 'NIT' LIMIT 1`,
+      );
+      if (tipoNit) {
+        dto.idTipoDocumento = tipoNit.id_tipo_documento;
+      } else {
+        const [primerTipo] = await this.dataSource.query(
+          `SELECT id_tipo_documento FROM tipos_documento LIMIT 1`,
+        );
+        dto.idTipoDocumento = primerTipo?.id_tipo_documento;
+      }
+    }
+
     const idProveedor = await this.dataSource.transaction(async (manager) => {
       const tercero = await manager.save(
         Tercero,
