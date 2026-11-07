@@ -3,6 +3,41 @@ import { getAccessToken, clearSession, saveDraftsBeforeLeaving } from './auth';
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
+export type SecurityEventType =
+  | 'AUTH_401'
+  | 'FORBIDDEN_403'
+  | 'RATE_LIMIT_429'
+  | 'CSP_VIOLATION'
+  | 'UNSAFE_UPLOAD';
+
+export interface SecurityMetricEvent {
+  type: SecurityEventType;
+  path?: string;
+  detail?: string;
+  status?: number;
+  timestamp?: string;
+}
+
+/**
+ * Registra y propaga métricas y eventos de seguridad en el frontend.
+ * Permite observabilidad de incidentes como fuerza bruta, intentos de escalada o violaciones de políticas.
+ */
+export function reportSecurityMetric(event: SecurityMetricEvent): void {
+  const payload = {
+    ...event,
+    timestamp: event.timestamp || new Date().toISOString(),
+    userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'server',
+  };
+
+  if (process.env.NODE_ENV !== 'production') {
+    console.warn(`[SECURITY METRIC] ${payload.type}:`, payload);
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('crm-security-event', { detail: payload }));
+  }
+}
+
 export interface ProblemDetails {
   type: string;        // ej. "https://api.crmcontable.com/errors/stock-insuficiente"
   title: string;       // ej. "Stock insuficiente"
@@ -47,14 +82,36 @@ export async function api<T>(path: string, opts: RequestOpts = {}): Promise<T> {
   const url = path.startsWith('http') ? path : `${API_URL}${path.startsWith('/') ? '' : '/'}${path}`;
   const res = await fetch(url, { ...opts, headers });
 
-  // 401 Token faltante o expirado fuera de /auth/
-  if (res.status === 401 && !path.includes('/auth/')) {
-    saveDraftsBeforeLeaving();
-    clearSession();
-    if (typeof window !== 'undefined') {
-      const currentPath = window.location.pathname;
-      window.location.assign(`/auth/login?next=${encodeURIComponent(currentPath)}`);
+  // Registro de telemetría de seguridad según código de respuesta
+  if (res.status === 401) {
+    reportSecurityMetric({
+      type: 'AUTH_401',
+      path,
+      status: 401,
+      detail: 'Sesión no autorizada o token JWT expirado',
+    });
+    if (!path.includes('/auth/')) {
+      saveDraftsBeforeLeaving();
+      clearSession();
+      if (typeof window !== 'undefined') {
+        const currentPath = window.location.pathname;
+        window.location.assign(`/auth/login?next=${encodeURIComponent(currentPath)}`);
+      }
     }
+  } else if (res.status === 403) {
+    reportSecurityMetric({
+      type: 'FORBIDDEN_403',
+      path,
+      status: 403,
+      detail: 'Intento de acceso a recurso restringido (falta de permiso granular)',
+    });
+  } else if (res.status === 429) {
+    reportSecurityMetric({
+      type: 'RATE_LIMIT_429',
+      path,
+      status: 429,
+      detail: 'Límite de tasa superado (posible ráfaga o fuerza bruta)',
+    });
   }
 
   if (!res.ok) {

@@ -7,24 +7,28 @@ import { Eye, EyeOff, Lock, Mail, ShieldAlert, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { BannerError } from '@/components/ui/BannerError';
-import { api, ApiError, ProblemDetails } from '@/lib/api';
+import { api, ApiError, ProblemDetails, reportSecurityMetric } from '@/lib/api';
 import { setSession } from '@/lib/auth';
-import { cleanIdentification } from '@/lib/format';
+import { cleanIdentification, sanitizeRedirectUrl } from '@/lib/format';
 
-// Directorio de usuarios y documentos según la base de datos (backend/scripts/data/base.js)
-const USUARIOS_ENLACE = [
-  { documento: '1014234567', email: 'admin@crmcontable.com', rol: 'Administrador (Admin)', nombre: 'Carlos Andrés Pérez' },
-  { documento: '1020567890', email: 'gerencia@crmcontable.com', rol: 'Gerente General', nombre: 'María Fernanda Morales' },
-  { documento: '1035678901', email: 'usuario@crmcontable.com', rol: 'Asesor de Mostrador (Usuario)', nombre: 'Juan Camilo Gómez' },
-  { documento: '1047890123', email: 'vendedor@crmcontable.com', rol: 'Asesora Comercial', nombre: 'Laura Daniela Ortiz' },
-  { documento: '1052345678', email: 'operador@crmcontable.com', rol: 'Encargado de Bodega', nombre: 'Andrés Felipe Rojas' },
-  { documento: '1063456789', email: 'caja@crmcontable.com', rol: 'Cajera Facturadora', nombre: 'Sandra Milena Vargas' },
-];
+// Directorio de enlace inteligente restringido exclusivamente a entorno de desarrollo local
+const IS_DEV = process.env.NODE_ENV !== 'production';
+const USUARIOS_ENLACE = IS_DEV
+  ? [
+      { documento: '1014234567', email: 'admin@crmcontable.com', rol: 'Administrador (Admin)', nombre: 'Carlos Andrés Pérez' },
+      { documento: '1020567890', email: 'gerencia@crmcontable.com', rol: 'Gerente General', nombre: 'María Fernanda Morales' },
+      { documento: '1035678901', email: 'usuario@crmcontable.com', rol: 'Asesor de Mostrador (Usuario)', nombre: 'Juan Camilo Gómez' },
+      { documento: '1047890123', email: 'vendedor@crmcontable.com', rol: 'Asesora Comercial', nombre: 'Laura Daniela Ortiz' },
+      { documento: '1052345678', email: 'operador@crmcontable.com', rol: 'Encargado de Bodega', nombre: 'Andrés Felipe Rojas' },
+      { documento: '1063456789', email: 'caja@crmcontable.com', rol: 'Cajera Facturadora', nombre: 'Sandra Milena Vargas' },
+    ]
+  : [];
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const nextUrl = searchParams.get('next') || '/dashboard';
+  // Sanitización estricta contra ataques Open Redirect (CWE-601)
+  const nextUrl = sanitizeRedirectUrl(searchParams.get('next'), '/dashboard');
   const isExpired = searchParams.get('expired') === '1';
 
   const [identification, setIdentification] = useState('');
@@ -216,7 +220,11 @@ function LoginForm() {
           placeholder="Ej. 1014234567"
           value={identification}
           onChange={(e) => handleIdentificationChange(e.target.value)}
-          helperText="Al digitar tu identificación se vinculará tu correo corporativo"
+          helperText={
+            IS_DEV
+              ? 'Ambiente de desarrollo: vincula automáticamente el correo de pruebas'
+              : undefined
+          }
         />
 
         {/* Correo Electrónico */}

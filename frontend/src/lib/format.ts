@@ -55,3 +55,22 @@ export function cleanIdentification(input: string): string {
   // Elimina puntos, guiones y espacios según prevención RCE
   return input.replace(/[\.\-\s]/g, '');
 }
+
+/**
+ * Valida y sanea URLs de redirección para mitigar ataques de Open Redirect (CWE-601).
+ * Asegura que solo se redirija a rutas relativas internas válidas.
+ */
+export function sanitizeRedirectUrl(url: string | null | undefined, fallback = '/dashboard'): string {
+  if (!url) return fallback;
+  const trimmed = url.trim();
+  // Debe comenzar estrictamente con una sola barra '/' y no con '//' ni contener '\' ni esquemas
+  if (
+    trimmed.startsWith('/') &&
+    !trimmed.startsWith('//') &&
+    !trimmed.includes('\\') &&
+    !trimmed.includes(':')
+  ) {
+    return trimmed;
+  }
+  return fallback;
+}

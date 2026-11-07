@@ -41,6 +41,9 @@ export function setSession(token: string, userOverride?: Partial<UserSession>): 
   inMemoryToken = token;
   if (typeof window !== 'undefined') {
     sessionStorage.setItem('crm_access_token', token);
+    // Bandera de sesión activa para protección en Next.js Middleware (Edge Runtime)
+    const isSecure = window.location.protocol === 'https:' ? '; Secure' : '';
+    document.cookie = `crm_session_active=1; path=/; SameSite=Lax${isSecure}`;
   }
 
   const claims = parseJwt(token);
@@ -97,18 +100,35 @@ export function clearSession(): void {
   if (warningTimer) clearTimeout(warningTimer);
   if (typeof window !== 'undefined') {
     sessionStorage.removeItem('crm_access_token');
+    const isSecure = window.location.protocol === 'https:' ? '; Secure' : '';
+    document.cookie = `crm_session_active=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax${isSecure}`;
   }
 }
 
 export function saveDraftsBeforeLeaving(): void {
   // Pilar RCE: Cero pérdida de datos ante desconexión o expiración
+  // Se excluyen estrictamente campos de contraseñas, secretos o datos sensibles
   if (typeof window !== 'undefined') {
     const activeForms = document.querySelectorAll<HTMLFormElement>('form[data-auto-draft]');
     activeForms.forEach((form) => {
       const key = form.getAttribute('data-auto-draft');
       if (key) {
         const formData = new FormData(form);
-        const entries = Object.fromEntries(formData.entries());
+        const entries: Record<string, any> = {};
+
+        // Filtrar campos sensibles para prevenir fugas en localStorage
+        const sensitiveRegex = /password|clave|token|secret|pin|cvv|tarjeta|credit/i;
+        formData.forEach((value, fieldName) => {
+          const inputEl = form.querySelector(`[name="${fieldName}"]`);
+          const isPassword = inputEl?.getAttribute('type') === 'password';
+          const isSensitive = inputEl?.hasAttribute('data-sensitive');
+          const isSensitiveName = sensitiveRegex.test(fieldName);
+
+          if (!isPassword && !isSensitive && !isSensitiveName) {
+            entries[fieldName] = value;
+          }
+        });
+
         localStorage.setItem(`draft:${key}`, JSON.stringify(entries));
       }
     });

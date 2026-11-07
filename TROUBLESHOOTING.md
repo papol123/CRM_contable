@@ -178,3 +178,20 @@ npx tsc --noEmit -p tsconfig.json   # tipos estrictos
 npm test                            # unitarias
 npm run test:e2e                    # e2e sobre PostgreSQL embebido (nunca Cloud SQL)
 ```
+
+
+---
+
+## 7. Frontend y Seguridad (Auditoría y Correcciones)
+
+### [2026-11-07 11:40 America/Bogota] Fortalecimiento de Seguridad y Métricas en Frontend (Next.js)
+- **Descripción del error:** Ausencia de cabeceras de seguridad HTTP (CSP, HSTS, X-Frame-Options), riesgo de Open Redirect en el login (`?next=`), exposición de datos de usuarios en bundle público, persistencia de datos sensibles en borrador y falta de validación previa en carga de XML.
+- **Causa raíz:** `next.config.mjs` carecía de bloque `headers()`, la redirección tras autenticación no saneaba parámetros externos, la constante `USUARIOS_ENLACE` estaba expuesta en producción, `saveDraftsBeforeLeaving` guardaba todos los campos de formularios en localStorage y la carga de XML no validaba tamaño ni MIME en cliente.
+- **Solución aplicada:**
+  1. Configuración de `securityHeaders` en `frontend/next.config.mjs` (CSP, HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy).
+  2. Implementación de `sanitizeRedirectUrl` en `frontend/src/lib/format.ts` y aplicación en `frontend/src/app/auth/login/page.tsx`.
+  3. Aislamiento de `USUARIOS_ENLACE` exclusivamente para entorno de desarrollo (`process.env.NODE_ENV !== 'production'`).
+  4. Saneamiento de datos sensibles en `saveDraftsBeforeLeaving` (`frontend/src/lib/auth.ts`) para no almacenar contraseñas ni secretos en `localStorage`.
+  5. Creación de `frontend/src/middleware.ts` para validación perimetral de sesión activa en Edge Runtime.
+  6. Validación preventiva de archivos XML (máximo 5 MB y tipo XML estricto) y emisión de telemetría de eventos de seguridad con `reportSecurityMetric` en `frontend/src/lib/api.ts`.
+- **Prevención:** Verificación de compilación exitosa (`npm run build`) validando tipos, optimización de bundles y generación de páginas con middleware perimetral activo.

@@ -19,8 +19,10 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { BannerError } from '@/components/ui/BannerError';
 import { useToast } from '@/components/ui/Toast';
-import { api, ApiError, ProblemDetails } from '@/lib/api';
+import { api, ApiError, ProblemDetails, reportSecurityMetric } from '@/lib/api';
 import { formatCOP } from '@/lib/format';
+
+const MAX_XML_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB según directrices de seguridad (RFC 9110 §413)
 
 export default function NuevaCompraPage() {
   const router = useRouter();
@@ -68,6 +70,49 @@ export default function NuevaCompraPage() {
   const handleUploadXml = async (file: File) => {
     setIsReadingXml(true);
     setXmlError(null);
+
+    // Validación preventiva en cliente: Tipo de archivo seguro (RFC 9110 §415)
+    const isXmlExtension = file.name.toLowerCase().endsWith('.xml');
+    const isXmlMime = file.type === 'text/xml' || file.type === 'application/xml' || file.type === '';
+    if (!isXmlExtension || !isXmlMime) {
+      const problem: ProblemDetails = {
+        type: 'https://api.crmcontable.com/errors/unsupported-media-type',
+        title: 'Formato de archivo no soportado',
+        status: 415,
+        detail: 'El archivo seleccionado no es un XML válido. Solo se admiten facturas en formato XML UBL 2.1.',
+        instance: '/proveedores/compras/nueva',
+      };
+      setXmlError(problem);
+      setIsReadingXml(false);
+      reportSecurityMetric({
+        type: 'UNSAFE_UPLOAD',
+        path: '/facturas-compra/importar-xml',
+        status: 415,
+        detail: `Intento de carga de archivo no XML: ${file.name} (${file.type})`,
+      });
+      return;
+    }
+
+    // Validación preventiva en cliente: Tamaño máximo (RFC 9110 §413)
+    if (file.size > MAX_XML_SIZE_BYTES) {
+      const problem: ProblemDetails = {
+        type: 'https://api.crmcontable.com/errors/payload-too-large',
+        title: 'Archivo demasiado grande',
+        status: 413,
+        detail: `El archivo supera el tamaño máximo permitido de 5 MB (tamaño actual: ${(file.size / (1024 * 1024)).toFixed(2)} MB).`,
+        instance: '/proveedores/compras/nueva',
+      };
+      setXmlError(problem);
+      setIsReadingXml(false);
+      reportSecurityMetric({
+        type: 'UNSAFE_UPLOAD',
+        path: '/facturas-compra/importar-xml',
+        status: 413,
+        detail: `Archivo XML excede límite de 5 MB: ${file.size} bytes`,
+      });
+      return;
+    }
+
     try {
       const formData = new FormData();
       formData.append('archivo', file);
