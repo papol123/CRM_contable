@@ -25,6 +25,7 @@ import {
   User,
 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
+import { ComprobanteCierre, ComprobanteCierreProps } from './ComprobanteCierre';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
@@ -109,7 +110,7 @@ export default function CierreDiarioPage() {
   const hoyStr = fechaLocalHoy();
   const [fechaCierre, setFechaCierre] = useState(hoyStr);
 
-  // 1. Facturado día anterior (Siigo / externo)
+  // 1. Facturado del día anterior que entra hoy a caja
   const [facturadoDiaAnterior, setFacturadoDiaAnterior] = useState<number>(0);
 
   // 2. Remisiones del día (se emiten en el formulario real de remisión)
@@ -324,8 +325,14 @@ export default function CierreDiarioPage() {
       setCierreGuardado(res.cierre);
       queryClient.invalidateQueries({ queryKey: ['cierre-diario', fechaCierre] });
       success('Cierre Diario Consolidado', `El cierre del día ${fechaCierre} quedó guardado en el sistema.`);
+      if (imprimirAlGuardar.current) {
+        imprimirAlGuardar.current = false;
+        // Deja que React pinte el comprobante ya guardado antes de abrir la impresión
+        setTimeout(() => window.print(), 300);
+      }
     },
     onError: (err: Error) => {
+      imprimirAlGuardar.current = false;
       toastError('No se pudo guardar el cierre', err.message);
     },
   });
@@ -334,14 +341,47 @@ export default function CierreDiarioPage() {
     if (!guardarCierre.isPending) guardarCierre.mutate();
   };
 
-  // Imprimir soporte de cierre
+  // Imprimir el comprobante del cierre (ComprobanteCierre, solo visible al imprimir).
+  // Si hay cambios sin guardar, ofrece guardarlos primero para que lo impreso quede registrado.
+  const imprimirAlGuardar = useRef(false);
   const handleImprimir = () => {
+    const sinGuardar = !cierreGuardado || hayCambiosSinGuardar;
+    if (sinGuardar && window.confirm('El cierre tiene cambios sin guardar. ¿Guardarlo antes de imprimir?')) {
+      imprimirAlGuardar.current = true;
+      handleGuardarCierre();
+      return;
+    }
     window.print();
   };
 
+  const { data: empresa } = useQuery<ComprobanteCierreProps['empresa']>({
+    queryKey: ['configuracion-empresa'],
+    queryFn: () => api('/configuracion/empresa'),
+    staleTime: 10 * 60_000,
+  });
+
   return (
     <AppLayout>
-      <div className="space-y-6 max-w-7xl mx-auto pb-12 print:p-0">
+      <ComprobanteCierre
+        fecha={fechaCierre}
+        empresa={empresa}
+        remisiones={remisiones}
+        gastos={gastos}
+        compras={compras}
+        facturadoDiaAnterior={Number(facturadoDiaAnterior || 0)}
+        efectivoReal={Number(efectivoReal || 0)}
+        observaciones={cierreObservaciones.trim()}
+        guardado={
+          cierreGuardado
+            ? {
+                por: cierreGuardado.cerradoPor?.nombre || cierreGuardado.cerradoPor?.email || '—',
+                el: new Date(cierreGuardado.actualizadoEn).toLocaleString('es-CO'),
+              }
+            : null
+        }
+        borrador={!cierreGuardado || hayCambiosSinGuardar}
+      />
+      <div className="space-y-6 max-w-7xl mx-auto pb-12 print:hidden">
         {/* Cabecera */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#e2e8f0] print:border-none">
           <div className="flex items-center gap-3">
@@ -431,7 +471,7 @@ export default function CierreDiarioPage() {
               {formatCOP(facturadoDiaAnterior)}
             </div>
             <div className="text-[11px] text-[#64748b] mt-0.5">
-              Ref. Siigo / Facturación previa
+              Facturación del día anterior
             </div>
           </div>
 
@@ -475,13 +515,13 @@ export default function CierreDiarioPage() {
           </div>
         </div>
 
-        {/* Sección: Facturado Día Anterior (Siigo) */}
+        {/* Sección: Facturado Día Anterior */}
         <div className="bg-white border border-[#e2e8f0] rounded-xl p-5 shadow-card space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Building className="w-4 h-4 text-[#1d63ed]" />
               <h2 className="text-sm font-semibold text-[#0f172a]">
-                Facturado Día Anterior (Ventas Externas / Referencia Siigo)
+                Facturado del Día Anterior (dinero que entra hoy a caja)
               </h2>
             </div>
             <span className="text-[11px] text-[#64748b]">
@@ -761,9 +801,9 @@ export default function CierreDiarioPage() {
         <div className="bg-white border border-[#e2e8f0] rounded-xl p-6 shadow-card space-y-6">
           <div className="flex items-center justify-between pb-3 border-b border-[#e2e8f0]">
             <div>
-              <h2 className="text-base font-bold text-[#0f172a]">Arqueo de Caja y Balance Definitivo del Cierre</h2>
+              <h2 className="text-base font-bold text-[#0f172a]">Cuadre de Caja del Día</h2>
               <p className="text-xs text-[#64748b]">
-                Cuadre en una sola página: compara el saldo esperado por sistema contra el dinero físico contado
+                Compara el dinero que debería haber en caja con el dinero que realmente se contó
               </p>
             </div>
             <div className="text-right">
@@ -776,28 +816,28 @@ export default function CierreDiarioPage() {
             {/* Resumen Contable */}
             <div className="bg-[#f8fafc] p-4 rounded-xl border border-[#e2e8f0] space-y-3 text-xs">
               <span className="font-semibold text-[#0f172a] uppercase tracking-wider block">
-                Fórmula de Arqueo
+                ¿Cuánto debe haber en caja?
               </span>
 
               <div className="flex justify-between items-center text-emerald-700">
-                <span>(+) Remisiones Pagadas:</span>
+                <span>(+) Ventas cobradas hoy</span>
                 <span className="font-semibold tabular-nums">{formatCOP(totalRemisionesCobradas)}</span>
               </div>
               <div className="flex justify-between items-center text-[#1d63ed]">
-                <span>(+) Facturado Día Anterior (Siigo):</span>
+                <span>(+) Facturado del día anterior</span>
                 <span className="font-semibold tabular-nums">{formatCOP(facturadoDiaAnterior)}</span>
               </div>
               <div className="flex justify-between items-center text-[#ef4444]">
-                <span>(-) Gastos del Día:</span>
+                <span>(−) Gastos pagados</span>
                 <span className="font-semibold tabular-nums">-{formatCOP(totalGastos)}</span>
               </div>
               <div className="flex justify-between items-center text-[#f59e0b]">
-                <span>(-) Compras Pagadas a Proveedores:</span>
+                <span>(−) Compras pagadas a proveedores</span>
                 <span className="font-semibold tabular-nums">-{formatCOP(totalComprasPagadas)}</span>
               </div>
 
               <div className="pt-2 border-t border-[#cbd5e1] flex justify-between items-center text-sm font-bold text-[#0f172a]">
-                <span>(=) Saldo Esperado en Caja:</span>
+                <span>(=) Dinero que debe haber</span>
                 <span className="text-base tabular-nums">{formatCOP(saldoEsperado)}</span>
               </div>
             </div>
@@ -805,12 +845,12 @@ export default function CierreDiarioPage() {
             {/* Arqueo de Efectivo Físico */}
             <div className="bg-white p-4 rounded-xl border border-[#e2e8f0] space-y-4">
               <span className="font-semibold text-[#0f172a] uppercase tracking-wider text-xs block">
-                Dinero Real en Caja Física
+                Dinero contado en caja
               </span>
 
               <div className="space-y-1">
                 <label className="text-[11px] font-semibold text-[#64748b] uppercase">
-                  Efectivo Total Contado (COP)
+                  Escribe cuánto dinero contaste (COP)
                 </label>
                 <Input
                   type="number"
@@ -825,13 +865,13 @@ export default function CierreDiarioPage() {
               {/* Resultado del Cuadre */}
               <div className="p-3 rounded-lg border flex items-center justify-between">
                 <div>
-                  <span className="text-xs font-semibold block">Diferencia de Caja:</span>
+                  <span className="text-xs font-semibold block">Resultado:</span>
                   <span className="text-[11px] text-[#64748b]">
                     {diferencia === 0
-                      ? 'Cuadre exacto (sin diferencias)'
+                      ? 'Caja cuadrada: no sobra ni falta dinero'
                       : diferencia > 0
-                      ? 'Sobrante en caja'
-                      : 'Faltante en caja'}
+                      ? 'Sobra dinero en caja'
+                      : 'Falta dinero en caja'}
                   </span>
                 </div>
                 <div

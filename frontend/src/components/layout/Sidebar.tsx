@@ -81,6 +81,7 @@ export function Sidebar() {
         { title: 'Cartera y Pagos', href: '/contabilidad/cartera', permission: 'cartera.consultar' },
         { title: 'Nómina', href: '/contabilidad/nomina', adminOnly: true, permission: 'nomina.consultar' },
         { title: 'Cierre Contable', href: '/contabilidad/cierre', adminOnly: true, permission: 'cierres.ejecutar' },
+        { title: 'Informe Mensual', href: '/contabilidad/cierre/mes', adminOnly: true, permission: 'cierres.ejecutar' },
       ],
     },
     {

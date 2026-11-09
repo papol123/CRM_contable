@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { PagosModule } from '../financiero/pagos.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { FacturaVenta } from '../../database/entities/factura-venta.entity';
 import { DetalleFacturaVenta } from '../../database/entities/detalle-factura-venta.entity';
@@ -36,6 +37,7 @@ import { ConsecutivosService } from './consecutivos.service';
       DetallePedido,
       HistorialEstadoPedido,
     ]),
+    PagosModule,
   ],
   controllers: [
     FacturasVentaController,

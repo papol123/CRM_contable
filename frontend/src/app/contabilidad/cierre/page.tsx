@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Lock,
@@ -13,6 +14,7 @@ import {
   TrendingUp,
   FileSpreadsheet,
   RefreshCw,
+  FileText,
 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/Button';
@@ -33,6 +35,7 @@ export default function CierrePage() {
   const { success } = useToast();
   const user = getCurrentUser();
   const isAdmin = user?.rol === 'ADMIN';
+  const router = useRouter();
 
   // Modal Cerrar Mes
   const [isCerrarOpen, setIsCerrarOpen] = useState(false);
@@ -78,6 +81,13 @@ export default function CierrePage() {
     },
   });
 
+  // Vista previa del mes a cerrar (mismo informe que se muestra después del cierre)
+  const { data: vistaPrevia, isFetching: cargandoVistaPrevia } = useQuery<any>({
+    queryKey: ['informe-mensual', periodoACerrar],
+    queryFn: () => api<any>(`/reportes/cierre-mensual/${periodoACerrar}`),
+    enabled: isCerrarOpen && /^\d{4}-\d{2}$/.test(periodoACerrar),
+  });
+
   // Mutación: Cerrar Mes
   const cerrarMutation = useMutation({
     mutationFn: async () => {
@@ -90,11 +100,15 @@ export default function CierrePage() {
       });
     },
     onSuccess: () => {
-      success('Periodo Cerrado', `El periodo ${periodoACerrar} ha sido bloqueado para modificaciones.`);
+      success('Mes cerrado', `El periodo ${periodoACerrar} quedó cerrado. Abriendo el informe del mes…`);
+      const periodo = periodoACerrar;
       setIsCerrarOpen(false);
       setPeriodoACerrar('');
       setCerrarError(null);
-      refetchPeriodos();
+      queryClient.invalidateQueries({ queryKey: ['periodos-contables'] });
+      queryClient.invalidateQueries({ queryKey: ['informe-mensual', periodo] });
+      // Al cerrar se muestra el informe consolidado del mes (ventas, compras, gastos y cierres diarios)
+      router.push(`/contabilidad/cierre/mes?periodo=${periodo}&cerrado=1`);
     },
     onError: (err: any) => {
       if (err instanceof ApiError) {
@@ -178,6 +192,11 @@ export default function CierrePage() {
                 Cierre Diario
               </Button>
             </Link>
+            <Link href="/contabilidad/cierre/mes">
+              <Button variant="outline" icon={<FileText className="w-4 h-4" />}>
+                Informe Mensual
+              </Button>
+            </Link>
             <Button
               variant="outline"
               icon={<FileSpreadsheet className="w-4 h-4" />}
@@ -224,25 +243,31 @@ export default function CierrePage() {
           ) : (
             <>
               <KpiCard
-                title="Total Ingresos"
-                value={formatCOP(estadoResultados?.totalIngresos ?? 0)}
-                subtitle="Facturación neta acumulada"
+                title="Ventas del mes (sin IVA)"
+                value={formatCOP(estadoResultados?.ingresosOperacionales ?? 0)}
+                subtitle={`Mes en curso: ${formatPeriodo(estadoResultados?.periodo)}`}
               />
               <KpiCard
                 title="Costo de Mercancía"
-                value={formatCOP(estadoResultados?.totalCostos ?? 0)}
-                subtitle="Costo de repuestos vendidos"
+                value={formatCOP(estadoResultados?.costoDeVentas ?? 0)}
+                subtitle="Costo de los repuestos vendidos"
               />
               <KpiCard
-                title="Gastos Operativos"
-                value={formatCOP(estadoResultados?.totalGastos ?? 0)}
-                subtitle="Administración y ventas"
+                title="Gastos del mes"
+                value={formatCOP(estadoResultados?.gastosOperacionales?.total ?? 0)}
+                subtitle="Todos los gastos registrados"
               />
               <KpiCard
-                title="Utilidad Neta"
-                value={formatCOP(estadoResultados?.utilidadNeta ?? 0)}
-                subtitle="Margen neto del ejercicio"
-                badge={<Badge variant="active">Positivo</Badge>}
+                title={(estadoResultados?.utilidadOperacional ?? 0) >= 0 ? 'Ganancia del mes' : 'Pérdida del mes'}
+                value={formatCOP(Math.abs(estadoResultados?.utilidadOperacional ?? 0))}
+                subtitle={`Margen bruto ${estadoResultados?.margenBrutoPct ?? 0}%`}
+                badge={
+                  (estadoResultados?.utilidadOperacional ?? 0) >= 0 ? (
+                    <Badge variant="active">Ganancia</Badge>
+                  ) : (
+                    <Badge variant="error">Pérdida</Badge>
+                  )
+                }
               />
             </>
           )}
@@ -269,8 +294,9 @@ export default function CierrePage() {
                 <thead className="bg-[#f8fafc] border-b border-[#e2e8f0] text-[#64748b] uppercase tracking-wider font-semibold">
                   <tr>
                     <th className="py-3 px-4">Periodo</th>
-                    <th className="py-3 px-4">Año</th>
-                    <th className="py-3 px-4">Mes</th>
+                    <th className="py-3 px-4 text-right">Ventas (sin IVA)</th>
+                    <th className="py-3 px-4 text-right">Gastos</th>
+                    <th className="py-3 px-4 text-right">Resultado</th>
                     <th className="py-3 px-4 text-center">Estado</th>
                     <th className="py-3 px-4 text-right">Acción</th>
                   </tr>
@@ -285,8 +311,15 @@ export default function CierrePage() {
                         <td className="py-3.5 px-4 font-semibold text-[#0f172a]">
                           {formatPeriodo(`${p.anio}-${String(p.mes).padStart(2, '0')}`)}
                         </td>
-                        <td className="py-3.5 px-4 text-[#64748b]">{p.anio}</td>
-                        <td className="py-3.5 px-4 text-[#64748b]">{p.mes}</td>
+                        <td className="py-3.5 px-4 text-right tabular-nums">{formatCOP(p.total_ingresos)}</td>
+                        <td className="py-3.5 px-4 text-right tabular-nums">{formatCOP(p.total_gastos)}</td>
+                        <td
+                          className={`py-3.5 px-4 text-right tabular-nums font-semibold ${
+                            Number(p.utilidad_neta) >= 0 ? 'text-emerald-700' : 'text-[#dc2626]'
+                          }`}
+                        >
+                          {formatCOP(p.utilidad_neta)}
+                        </td>
                         <td className="py-3.5 px-4 text-center">
                           {isClosed ? (
                             <Badge variant="inactive">Cerrado</Badge>
@@ -294,7 +327,12 @@ export default function CierrePage() {
                             <Badge variant="active">Abierto</Badge>
                           )}
                         </td>
-                        <td className="py-3.5 px-4 text-right">
+                        <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                          <Link href={`/contabilidad/cierre/mes?periodo=${p.anio}-${String(p.mes).padStart(2, '0')}`}>
+                            <Button size="sm" variant="ghost" icon={<FileText className="w-3 h-3 text-[#1d63ed]" />}>
+                              Ver informe
+                            </Button>
+                          </Link>
                           {isClosed && (
                             <Button
                               size="sm"
@@ -357,6 +395,48 @@ export default function CierrePage() {
               onChange={(e) => setPeriodoACerrar(e.target.value)}
               helperText="Selecciona un mes ya finalizado"
             />
+
+            {periodoACerrar && (
+              <div className="p-3 rounded-lg bg-[#f8fafc] border border-[#e2e8f0] text-xs space-y-1.5">
+                <p className="font-semibold text-[#0f172a]">Así queda {formatPeriodo(periodoACerrar)}:</p>
+                {cargandoVistaPrevia && !vistaPrevia ? (
+                  <p className="text-[#64748b]">Consolidando el mes…</p>
+                ) : vistaPrevia ? (
+                  <>
+                    <div className="flex justify-between">
+                      <span>Ventas ({vistaPrevia.resumen.ventas.cantidad})</span>
+                      <span className="tabular-nums">{formatCOP(vistaPrevia.resumen.ventas.total)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Compras ({vistaPrevia.resumen.compras.cantidad})</span>
+                      <span className="tabular-nums">{formatCOP(vistaPrevia.resumen.compras.total)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Gastos ({vistaPrevia.resumen.gastos.cantidad})</span>
+                      <span className="tabular-nums">{formatCOP(vistaPrevia.resumen.gastos.total)}</span>
+                    </div>
+                    <div className="flex justify-between font-semibold border-t border-[#e2e8f0] pt-1.5">
+                      <span>{vistaPrevia.resultados.utilidadOperativa >= 0 ? 'Ganancia del mes' : 'Pérdida del mes'}</span>
+                      <span className="tabular-nums">{formatCOP(Math.abs(vistaPrevia.resultados.utilidadOperativa))}</span>
+                    </div>
+                    <div className="flex justify-between text-[#64748b]">
+                      <span>Cierres diarios hechos</span>
+                      <span>
+                        {vistaPrevia.cierresDiarios.cantidad} de {vistaPrevia.cierresDiarios.diasConMovimiento} días con movimiento
+                      </span>
+                    </div>
+                    {vistaPrevia.cierresDiarios.diasSinCierre.length > 0 && (
+                      <p className="flex items-start gap-1.5 text-amber-800 bg-amber-50 border border-amber-200 rounded p-2">
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                        {vistaPrevia.cierresDiarios.diasSinCierre.length} día(s) con movimientos no tienen cierre diario.
+                        Puedes cerrar el mes igual; quedarán señalados en el informe.
+                      </p>
+                    )}
+                    {vistaPrevia.estado?.cerrado && <p className="text-[#dc2626] font-semibold">Este mes ya está cerrado.</p>}
+                  </>
+                ) : null}
+              </div>
+            )}
 
             <div className="space-y-1">
               <label className="text-xs font-semibold text-[#0f172a] uppercase tracking-wider">

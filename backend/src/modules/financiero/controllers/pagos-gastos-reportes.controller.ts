@@ -37,6 +37,7 @@ import {
   DashboardConfigDto,
   ExportarReporteDto,
   PeriodoDto,
+  PeriodoParamDto,
   RangoFechasDto,
   ReabrirPeriodoDto,
 } from '../dto/reportes.dto';
@@ -282,6 +283,16 @@ export class ReportesController {
   @ApiResponse({ status: 422, description: 'El mes aún no termina' })
   async ejecutarCierreMensual(@Body() dto: CierreMensualDto, @Actor() actor: Actor) {
     return this.reportesService.ejecutarCierreMensual(dto, actor);
+  }
+
+  @Get('reportes/cierre-mensual/:periodo')
+  @RequirePermission('cierres.ejecutar')
+  @ApiOperation({
+    summary: 'Informe consolidado del mes (ventas, compras, gastos, resultados y cierres diarios)',
+    description: 'Sirve para revisar un mes antes de cerrarlo (abierto) o como soporte de un mes cerrado.',
+  })
+  async getInformeMensual(@Param() p: PeriodoParamDto) {
+    return this.reportesService.getInformeMensual(p.periodo);
   }
 
   @Post('reportes/exportar')

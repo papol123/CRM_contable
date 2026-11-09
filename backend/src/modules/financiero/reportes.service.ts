@@ -11,6 +11,8 @@ import { DataSource, EntityManager } from 'typeorm';
 import {
   consultarSaldosCompra,
   consultarSaldosVenta,
+  SQL_PAGADO_FACTURA_COMPRA,
+  SQL_PAGADO_FACTURA_VENTA,
   SQL_TOTAL_FACTURA_COMPRA,
   SQL_TOTAL_FACTURA_VENTA,
 } from '../../common/documentos/saldos';
@@ -591,7 +593,7 @@ export class ReportesService implements OnModuleInit {
     }
     const [anio, mes] = dto.periodo.split('-').map(Number);
 
-    return this.dataSource.transaction(async (manager) => {
+    const resultado = await this.dataSource.transaction(async (manager) => {
       // Espera a que terminen las transacciones que validaron el periodo abierto (FOR SHARE)
       const [existente] = await manager.query(
         `SELECT id_periodo, abierto FROM periodos_contables WHERE anio = $1 AND mes = $2 FOR UPDATE`,
@@ -630,6 +632,190 @@ export class ReportesService implements OnModuleInit {
       );
       return { mensaje: `Periodo ${dto.periodo} cerrado`, cierre };
     });
+    // El informe consolidado acompaña la respuesta: es lo que se muestra al cerrar
+    return { ...resultado, informe: await this.getInformeMensual(dto.periodo) };
+  }
+
+  /**
+   * Informe consolidado del mes: ventas, compras y gastos (totales, por día y
+   * detalle), estado de resultados y los cierres diarios con sus diferencias
+   * de caja. Sirve para revisar un mes antes de cerrarlo y como soporte del cierre.
+   */
+  async getInformeMensual(periodo: string) {
+    const r = rangoMes(periodo);
+    const [anio, mes] = periodo.split('-').map(Number);
+
+    const [estadoPeriodo] = await this.dataSource.query(
+      `SELECT pc.id_periodo AS id, pc.abierto, pc.fecha_cierre AS "fechaCierre", pc.observaciones,
+              pc.motivo_reapertura AS "motivoReapertura",
+              NULLIF(TRIM(CONCAT(u.nombres, ' ', u.apellidos)), '') AS "cerradoPor"
+         FROM periodos_contables pc
+         LEFT JOIN usuarios u ON u.id_usuario = pc.id_usuario_cierre
+        WHERE pc.anio = $1 AND pc.mes = $2`,
+      [anio, mes],
+    );
+
+    const ventas = aNumeros(
+      await this.dataSource.query(
+        `SELECT f.id_factura_venta AS id, f.numero_venta AS numero, to_char(f.fecha_expedicion, 'YYYY-MM-DD') AS fecha,
+                t.razon_social AS cliente,
+                ${SQL_TOTAL_FACTURA_VENTA} AS total,
+                LEAST(${SQL_PAGADO_FACTURA_VENTA}, ${SQL_TOTAL_FACTURA_VENTA}) AS cobrado
+           FROM facturas_venta f
+           JOIN clientes c ON c.id_cliente = f.id_cliente
+           JOIN terceros t ON t.id_tercero = c.id_tercero
+          WHERE f.anulada = false AND f.fecha_expedicion BETWEEN $1 AND $2
+          ORDER BY f.fecha_expedicion, f.numero_venta`,
+        [r.desde, r.hasta],
+      ),
+      ['total', 'cobrado'],
+    );
+
+    const compras = aNumeros(
+      await this.dataSource.query(
+        `SELECT fc.id_factura_compra AS id, fc.numero_factura AS "numeroFactura",
+                to_char(fc.fecha_emision, 'YYYY-MM-DD') AS fecha, t.razon_social AS proveedor,
+                ${SQL_TOTAL_FACTURA_COMPRA} AS total,
+                LEAST(${SQL_PAGADO_FACTURA_COMPRA}, ${SQL_TOTAL_FACTURA_COMPRA}) AS pagado
+           FROM facturas_compra fc
+           JOIN estados_factura_compra e ON e.id_estado = fc.id_estado AND e.codigo <> 'ANULADA'
+           JOIN proveedores pr ON pr.id_proveedor = fc.id_proveedor
+           JOIN terceros t ON t.id_tercero = pr.id_tercero
+          WHERE fc.fecha_emision BETWEEN $1 AND $2
+          ORDER BY fc.fecha_emision, fc.numero_factura`,
+        [r.desde, r.hasta],
+      ),
+      ['total', 'pagado'],
+    );
+
+    const gastos = aNumeros(
+      await this.dataSource.query(
+        `SELECT g.id_gasto AS id, to_char(g.fecha, 'YYYY-MM-DD') AS fecha, g.descripcion,
+                cg.nombre AS categoria, mp.nombre AS "medioPago", g.monto
+           FROM gastos g
+           JOIN categorias_gasto cg ON cg.id_categoria_gasto = g.id_categoria_gasto
+           LEFT JOIN metodos_pago mp ON mp.id_metodo_pago = g.id_metodo_pago
+          WHERE g.anulado = false AND g.fecha BETWEEN $1 AND $2
+          ORDER BY g.fecha, g.descripcion`,
+        [r.desde, r.hasta],
+      ),
+      ['monto'],
+    );
+
+    const cierresDiarios = aNumeros(
+      await this.dataSource.query(
+        `SELECT to_char(cd.fecha, 'YYYY-MM-DD') AS fecha, cd.saldo_esperado AS "saldoEsperado",
+                cd.efectivo_real AS "efectivoReal", cd.diferencia, cd.observaciones,
+                NULLIF(TRIM(CONCAT(u.nombres, ' ', u.apellidos)), '') AS "cerradoPor"
+           FROM cierres_diarios cd
+           LEFT JOIN usuarios u ON u.id_usuario = cd.id_usuario_cierre
+          WHERE cd.fecha BETWEEN $1 AND $2
+          ORDER BY cd.fecha`,
+        [r.desde, r.hasta],
+      ),
+      ['saldoEsperado', 'efectivoReal', 'diferencia'],
+    );
+
+    const resultados = await this.resultados(r);
+    const suma = (filas: any[], campo: string) => redondear(filas.reduce((a, f) => a + Number(f[campo] || 0), 0));
+
+    // Consolidado por día: movimientos del sistema + cierre diario de ese día
+    type Dia = {
+      fecha: string;
+      ventas: number;
+      cobrado: number;
+      gastos: number;
+      compras: number;
+      comprasPagadas: number;
+      cierre: { saldoEsperado: number; efectivoReal: number; diferencia: number } | null;
+    };
+    const dias = new Map<string, Dia>();
+    const dia = (fecha: string) => {
+      if (!dias.has(fecha)) {
+        dias.set(fecha, { fecha, ventas: 0, cobrado: 0, gastos: 0, compras: 0, comprasPagadas: 0, cierre: null });
+      }
+      return dias.get(fecha)!;
+    };
+    for (const v of ventas) {
+      const d = dia(v.fecha);
+      d.ventas += v.total;
+      d.cobrado += v.cobrado;
+    }
+    for (const g of gastos) dia(g.fecha).gastos += g.monto;
+    for (const c of compras) {
+      const d = dia(c.fecha);
+      d.compras += c.total;
+      d.comprasPagadas += c.pagado;
+    }
+    for (const c of cierresDiarios) {
+      dia(c.fecha).cierre = { saldoEsperado: c.saldoEsperado, efectivoReal: c.efectivoReal, diferencia: c.diferencia };
+    }
+    const porDia = [...dias.values()]
+      .sort((a, b) => a.fecha.localeCompare(b.fecha))
+      .map((d) => ({
+        ...d,
+        ventas: redondear(d.ventas),
+        cobrado: redondear(d.cobrado),
+        gastos: redondear(d.gastos),
+        compras: redondear(d.compras),
+        comprasPagadas: redondear(d.comprasPagadas),
+      }));
+    const diasSinCierre = porDia
+      .filter((d) => !d.cierre && (d.ventas > 0 || d.gastos > 0 || d.compras > 0))
+      .map((d) => d.fecha);
+
+    const porCategoria = new Map<string, number>();
+    for (const g of gastos) porCategoria.set(g.categoria, (porCategoria.get(g.categoria) || 0) + g.monto);
+
+    const ventasTotal = suma(ventas, 'total');
+    const ventasCobrado = suma(ventas, 'cobrado');
+    const comprasTotal = suma(compras, 'total');
+    const comprasPagado = suma(compras, 'pagado');
+    const gastosTotal = suma(gastos, 'monto');
+    const sobrantes = redondear(cierresDiarios.filter((c) => c.diferencia > 0).reduce((a, c) => a + c.diferencia, 0));
+    const faltantes = redondear(cierresDiarios.filter((c) => c.diferencia < 0).reduce((a, c) => a - c.diferencia, 0));
+
+    return {
+      periodo,
+      desde: r.desde,
+      hasta: r.hasta,
+      estado: estadoPeriodo
+        ? { ...estadoPeriodo, cerrado: !estadoPeriodo.abierto }
+        : { cerrado: false, abierto: true },
+      resumen: {
+        ventas: { cantidad: ventas.length, total: ventasTotal, cobrado: ventasCobrado, porCobrar: redondear(ventasTotal - ventasCobrado) },
+        compras: { cantidad: compras.length, total: comprasTotal, pagado: comprasPagado, porPagar: redondear(comprasTotal - comprasPagado) },
+        gastos: {
+          cantidad: gastos.length,
+          total: gastosTotal,
+          porCategoria: [...porCategoria.entries()]
+            .map(([categoria, total]) => ({ categoria, total: redondear(total) }))
+            .sort((a, b) => b.total - a.total),
+        },
+        // Dinero que entró menos el que salió por lo registrado en el mes
+        flujoCaja: redondear(ventasCobrado - comprasPagado - gastosTotal),
+      },
+      resultados: {
+        ingresos: resultados.ingresosTotales,
+        costoMercancia: resultados.costoMercanciaVendida,
+        utilidadBruta: resultados.utilidadBruta,
+        margenBrutoPct: resultados.margenBrutoPct,
+        gastos: resultados.gastosOperativos,
+        utilidadOperativa: resultados.utilidadOperativa,
+        ivaGenerado: resultados.ivaGenerado,
+      },
+      cierresDiarios: {
+        cantidad: cierresDiarios.length,
+        diasConMovimiento: porDia.filter((d) => d.ventas > 0 || d.gastos > 0 || d.compras > 0).length,
+        diasSinCierre,
+        sobrantes,
+        faltantes,
+        diferenciaNeta: redondear(sobrantes - faltantes),
+        detalle: cierresDiarios,
+      },
+      porDia,
+      detalle: { ventas, compras, gastos },
+    };
   }
 
   async getPeriodosContables() {

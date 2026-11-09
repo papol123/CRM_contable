@@ -2,6 +2,7 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsNotEmpty,
   IsNumber,
@@ -104,6 +105,19 @@ export class CreateFacturaCompraDto {
   @Min(0)
   @Max(100)
   tarifaReteIcaPorMil?: number;
+
+  @ApiPropertyOptional({
+    example: true,
+    description: 'true: registra en la misma operación el pago por el total (queda PAGADA, sin cuenta por pagar)',
+  })
+  @IsOptional()
+  @IsBoolean()
+  pagadaDeContado?: boolean;
+
+  @ApiPropertyOptional({ description: 'Medio de pago del pago de contado. Por defecto, EFECTIVO' })
+  @IsOptional()
+  @IsUUID()
+  idMetodoPago?: string;
 
   @ApiProperty({ type: [ItemFacturaCompraDto] })
   @IsArray()
