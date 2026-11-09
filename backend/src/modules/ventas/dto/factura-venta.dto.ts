@@ -93,6 +93,19 @@ export class CreateFacturaVentaDto {
   @MaxLength(1000)
   observaciones?: string;
 
+  @ApiPropertyOptional({
+    example: true,
+    description: 'true: registra en la misma operación el pago por el total (venta de contado: queda PAGADA, sin cartera)',
+  })
+  @IsOptional()
+  @IsBoolean()
+  pagadaDeContado?: boolean;
+
+  @ApiPropertyOptional({ description: 'Medio de pago de la venta de contado. Por defecto, EFECTIVO' })
+  @IsOptional()
+  @IsUUID()
+  idMetodoPago?: string;
+
   @ApiProperty({ type: [ItemFacturaVentaDto] })
   @IsArray()
   @ArrayMinSize(1, { message: 'La remisión debe incluir al menos un producto' })

@@ -32,13 +32,17 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-[#f8fafc] flex">
-      {/* Sidebar fijo */}
-      <Sidebar />
+      {/* Sidebar fijo (no se imprime) */}
+      <div className="print:hidden">
+        <Sidebar />
+      </div>
 
       {/* Main Content Area desplazado a la derecha del sidebar */}
-      <div className="flex-1 flex flex-col pl-[72px] lg:pl-[260px] min-w-0 transition-all duration-300">
-        <Header />
-        <main className="flex-1 p-6 max-w-[1600px] w-full mx-auto animate-in fade-in duration-200">
+      <div className="flex-1 flex flex-col pl-[72px] lg:pl-[260px] print:pl-0 min-w-0 transition-all duration-300">
+        <div className="print:hidden">
+          <Header />
+        </div>
+        <main className="flex-1 p-6 print:p-0 max-w-[1600px] w-full mx-auto animate-in fade-in duration-200">
           {children}
         </main>
       </div>

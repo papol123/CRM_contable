@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   InternalServerErrorException,
   UnprocessableEntityException,
 } from '@nestjs/common';
@@ -34,6 +35,11 @@ import { PdfService } from '../../common/pdf/pdf.service';
 import { ConsecutivosService } from './consecutivos.service';
 import { AuditoriaService } from '../auditoria/auditoria.service';
 import { Actor } from '../auth/decorators/actor.decorator';
+import { PagosService } from '../financiero/pagos.service';
+import { MetodoPago } from '../../database/entities/metodo-pago.entity';
+
+/** Marca del cobro que se crea junto con una remisión de contado (se anula con ella). */
+const PREFIJO_PAGO_CONTADO_VENTA = 'Cobro de contado de la remisión';
 import { PERMISOS_GLOBALES, asegurarPropietario, filtroPropietario } from '../../common/autorizacion/propiedad';
 
 export interface OpcionesCreacionFactura {
@@ -55,6 +61,7 @@ export class FacturasVentaService {
     private readonly consecutivos: ConsecutivosService,
     private readonly auditoria: AuditoriaService,
     private readonly pdf: PdfService,
+    private readonly pagos: PagosService,
   ) {}
 
   // ─── Consultas ─────────────────────────────────────────────────────────────
@@ -176,6 +183,9 @@ export class FacturasVentaService {
   // ─── Creación ──────────────────────────────────────────────────────────────
 
   async createFactura(dto: CreateFacturaVentaDto, actor?: Actor): Promise<any> {
+    if (dto.pagadaDeContado && actor && !actor.permisos.includes('pagos.registrar')) {
+      throw new ForbiddenException('Registrar la venta pagada de contado requiere el permiso pagos.registrar');
+    }
     const id = await this.dataSource.transaction(async (manager) => {
       const idFactura = await this.crearEnTransaccion(manager, dto, actor?.id);
       await this.auditoria.registrar(
@@ -190,9 +200,35 @@ export class FacturasVentaService {
         },
         manager,
       );
+
+      // Venta de contado: el cobro por el total se registra en la misma transacción
+      if (dto.pagadaDeContado) {
+        const [saldo] = await consultarSaldosVenta(manager, { id: idFactura });
+        if (saldo && saldo.saldo > 0) {
+          const factura = await manager.findOne(FacturaVenta, { where: { id: idFactura } });
+          await this.pagos.registrarEnTransaccion(
+            manager,
+            {
+              tipoPago: 'factura de venta',
+              idFactura: idFactura,
+              idMetodoPago: dto.idMetodoPago || (await this.metodoEfectivo(manager)),
+              monto: saldo.saldo,
+              fechaPago: factura?.fechaExpedicion,
+              observaciones: `${PREFIJO_PAGO_CONTADO_VENTA} ${factura?.numeroVenta ?? ''}`.trim(),
+            },
+            actor,
+          );
+        }
+      }
       return idFactura;
     });
     return this.findFacturaById(id);
+  }
+
+  private async metodoEfectivo(manager: EntityManager): Promise<string> {
+    const metodo = await manager.findOne(MetodoPago, { where: { codigo: 'EFECTIVO' } });
+    if (!metodo) throw new UnprocessableEntityException('Indique idMetodoPago: no existe el medio de pago EFECTIVO');
+    return metodo.id;
   }
 
   /**
@@ -358,6 +394,24 @@ export class FacturasVentaService {
         throw new ConflictException('La remisión fue castigada como cartera incobrable y no se puede anular');
       }
       await validarPeriodoAbierto(manager, factura.fechaExpedicion, 'anular la remisión');
+
+      // El cobro de contado que se registró junto con la remisión se anula con ella.
+      // Los abonos registrados aparte (POST /pagos) se siguen exigiendo anular primero.
+      const pagosDeContado: { id_pago: string }[] = await manager.query(
+        `SELECT ap.id_pago
+           FROM aplicacion_pago_venta ap
+           JOIN pagos p ON p.id_pago = ap.id_pago
+           JOIN estados_pago ep ON ep.id_estado = p.id_estado
+          WHERE ap.id_factura_venta = $1
+            AND ep.codigo <> 'ANULADO'
+            AND p.observaciones LIKE $2
+            AND NOT EXISTS (SELECT 1 FROM aplicacion_pago_venta o
+                             WHERE o.id_pago = ap.id_pago AND o.id_factura_venta <> $1)`,
+        [id, `${PREFIJO_PAGO_CONTADO_VENTA}%`],
+      );
+      for (const { id_pago } of pagosDeContado) {
+        await this.pagos.anularEnTransaccion(manager, id_pago, `Anulación de la remisión: ${motivo}`, actor);
+      }
 
       // No se anula una remisión con pagos vigentes: primero se reversan los pagos
       const [saldo] = await consultarSaldosVenta(manager, { id, incluirCastigadas: true });

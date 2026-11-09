@@ -89,9 +89,18 @@ export class PagosService {
    * saldo (A6) y, si la deja en cero, la factura pasa a PAGADA.
    */
   async create(dto: CreatePagoDto, actor?: Actor): Promise<any> {
+    const id = await this.dataSource.transaction((manager) => this.registrarEnTransaccion(manager, dto, actor));
+    return this.findById(id);
+  }
+
+  /**
+   * Cuerpo de create() dentro de una transacción existente. Lo usa también la
+   * compra pagada de contado, para que compra y pago queden juntos o ninguno.
+   */
+  async registrarEnTransaccion(manager: EntityManager, dto: CreatePagoDto, actor?: Actor): Promise<string> {
     const idUsuario = actor?.id;
     const fechaPago = dto.fechaPago?.slice(0, 10) || fechaHoy();
-    const id = await this.dataSource.transaction(async (manager) => {
+    {
       await validarPeriodoAbierto(manager, fechaPago, 'registrar el pago');
       // Serializa pagos para que dos abonos simultáneos no superen el saldo
       await manager.query(`SELECT pg_advisory_xact_lock(hashtext('crm_pagos'))`);
@@ -176,13 +185,17 @@ export class PagosService {
         manager,
       );
       return pago.id;
-    });
-    return this.findById(id);
+    }
   }
 
   /** A5: anula el pago y reabre el saldo de las facturas a las que se aplicó. */
   async anular(id: string, motivo: string, actor?: Actor) {
-    return this.dataSource.transaction(async (manager) => {
+    return this.dataSource.transaction((manager) => this.anularEnTransaccion(manager, id, motivo, actor));
+  }
+
+  /** Cuerpo de anular() dentro de una transacción existente (p. ej. al anular la compra que pagó). */
+  async anularEnTransaccion(manager: EntityManager, id: string, motivo: string, actor?: Actor) {
+    {
       await manager.query(`SELECT pg_advisory_xact_lock(hashtext('crm_pagos'))`);
       const pago = await manager.findOne(Pago, { where: { id } });
       if (!pago) throw new NotFoundException(`Pago con ID ${id} no encontrado`);
@@ -218,7 +231,7 @@ export class PagosService {
         facturasReabiertas: ventas.length + compras.length,
         mensaje: `Pago anulado exitosamente: ${motivo}`,
       };
-    });
+    }
   }
 
   /** Recibo de caja (pagos de clientes) o comprobante de egreso (pagos a proveedores). */

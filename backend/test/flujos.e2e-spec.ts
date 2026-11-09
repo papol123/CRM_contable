@@ -106,6 +106,21 @@ describe('Flujos críticos', () => {
       await post(`/facturas-venta/${remision.id}/anular`, admin, { motivo: 'Devolución total del cliente' }).expect(409);
     });
 
+    it('venta de contado: queda cobrada en la misma operación y al anularla se anula el cobro', async () => {
+      const { body: remision } = await post('/facturas-venta', usuario, venta({ pagadaDeContado: true }), randomUUID()).expect(201);
+      expect(remision).toMatchObject({ total: 107100, pagado: 107100, saldo: 0 });
+      expect(remision.estado.codigo).toBe('PAGADA');
+
+      // Consumidor final (migración 008) disponible para la venta de mostrador
+      const cf = (await get('/clientes/buscar?q=222222222222', usuario)).body;
+      expect(cf.map((c: any) => c.razonSocial)).toContain('CONSUMIDOR FINAL');
+
+      await post(`/facturas-venta/${remision.id}/anular`, admin, { motivo: 'Devolución del cliente' }).expect(200);
+      const pagos = (await get('/pagos?tipoPago=factura%20de%20venta&limit=100', admin)).body.data;
+      const cobro = pagos.find((p: any) => p.observaciones?.includes(remision.numeroVenta));
+      expect(cobro?.estado?.codigo).toBe('ANULADO');
+    });
+
     it('venta a crédito con crédito bloqueado → 422; desbloquear conserva el cupo', async () => {
       const cupoAntes = Number(cliente.cupoCredito);
       await post(`/clientes/${cliente.id}/bloquear-credito`, admin, { motivo: 'Mora mayor a 90 días' }).expect(200);
@@ -176,6 +191,45 @@ describe('Flujos críticos', () => {
       expect((await get(`/facturas-compra/${compra.id}`, usuario)).body.saldo).toBe(101415.6);
     });
 
+    it('compra pagada de contado: queda PAGADA en la misma operación y al anularla se anula su pago', async () => {
+      const res = await post(
+        '/facturas-compra',
+        usuario,
+        {
+          idProveedor: compra.idProveedor,
+          numeroFactura: `E2E-CONTADO-${Date.now()}`,
+          fechaEmision: new Date().toISOString().slice(0, 10),
+          pagadaDeContado: true,
+          items: [{ idProducto: producto.id, cantidad: 1, costoUnitario: 10000, pctIva: 19 }],
+        },
+        randomUUID(),
+      ).expect(201);
+      expect(res.body).toMatchObject({ total: 11900, pagado: 11900, saldo: 0 });
+      expect(res.body.estado.codigo).toBe('PAGADA');
+
+      // Si el pago falla, la compra tampoco queda registrada
+      const numeroFallido = `E2E-FALLA-${Date.now()}`;
+      await post(
+        '/facturas-compra',
+        usuario,
+        {
+          idProveedor: compra.idProveedor,
+          numeroFactura: numeroFallido,
+          fechaEmision: new Date().toISOString().slice(0, 10),
+          pagadaDeContado: true,
+          idMetodoPago: randomUUID(),
+          items: [{ idProducto: producto.id, cantidad: 1, costoUnitario: 10000 }],
+        },
+        randomUUID(),
+      ).expect(404);
+      expect((await get(`/facturas-compra?search=${numeroFallido}`, admin)).body.data).toHaveLength(0);
+
+      await post(`/facturas-compra/${res.body.id}/anular`, admin, { motivo: 'Prueba de contado' }).expect(200);
+      const pagos = (await get('/pagos?tipoPago=factura%20de%20compra&limit=100', admin)).body.data;
+      const pagoContado = pagos.find((p: any) => Number(p.monto) === 11900 && p.observaciones?.includes(res.body.numeroFactura));
+      expect(pagoContado?.estado?.codigo).toBe('ANULADO');
+    });
+
     it('pagos propios (§5.2/§5.4): el Usuario no ve pagos de otros (404) y el Administrador ve todos', async () => {
       const metodo = (await get('/medios-pago', admin)).body[0];
       const base = { tipoPago: 'factura de compra', idFactura: compra.id, idMetodoPago: metodo.id };
@@ -226,6 +280,26 @@ describe('Flujos críticos', () => {
       await post(`/periodos-contables/${periodo.id_periodo}/reabrir`, admin, {}).expect(400);
       await post(`/periodos-contables/${periodo.id_periodo}/reabrir`, admin, { motivo: 'Corrección de gasto' }).expect(200);
       await post('/gastos', usuario, { idCategoriaGasto: categoria.id, descripcion: 'Gasolina', monto: 50000, fecha: `${mes}-10` }).expect(201);
+    });
+
+    it('informe mensual: consolida ventas, compras, gastos y cierres diarios; coincide con el día a día', async () => {
+      const hoy = new Date();
+      const mes = new Date(Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth() - 1, 15)).toISOString().slice(0, 7);
+      const inf = (await get(`/reportes/cierre-mensual/${mes}`, admin).expect(200)).body;
+
+      expect(inf.periodo).toBe(mes);
+      expect(inf.detalle.ventas.length).toBe(inf.resumen.ventas.cantidad);
+      expect(inf.detalle.gastos.length).toBe(inf.resumen.gastos.cantidad);
+      const sumaDias = (campo: string) =>
+        Math.round(inf.porDia.reduce((a: number, d: any) => a + d[campo], 0) * 100) / 100;
+      expect(sumaDias('ventas')).toBeCloseTo(inf.resumen.ventas.total, 1);
+      expect(sumaDias('gastos')).toBeCloseTo(inf.resumen.gastos.total, 1);
+      expect(sumaDias('compras')).toBeCloseTo(inf.resumen.compras.total, 1);
+      expect(inf.resultados.utilidadOperativa).toBeCloseTo(inf.resultados.utilidadBruta - inf.resultados.gastos, 1);
+      expect(inf.cierresDiarios.diasSinCierre.length).toBeLessThanOrEqual(inf.cierresDiarios.diasConMovimiento);
+
+      await get(`/reportes/cierre-mensual/${mes}`, usuario).expect(403);
+      await get('/reportes/cierre-mensual/2026-13', admin).expect(400);
     });
 
     it('no se cierra el mes en curso', async () => {

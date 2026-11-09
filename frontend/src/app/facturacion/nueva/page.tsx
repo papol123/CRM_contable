@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useId } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery, useMutation } from '@tanstack/react-query';
@@ -40,6 +40,8 @@ interface ItemVenta {
   disponible?: number;
 }
 
+const DOCUMENTO_CONSUMIDOR_FINAL = '222222222222';
+
 export default function NuevaRemisionPage() {
   const router = useRouter();
   const { success } = useToast();
@@ -57,6 +59,17 @@ export default function NuevaRemisionPage() {
   const [selectedCliente, setSelectedCliente] = useState<any | null>(null);
   const [selectedBodegaId, setSelectedBodegaId] = useState('');
   const [condicionPago, setCondicionPago] = useState<'CONTADO' | 'CREDITO'>('CONTADO');
+  const [idMetodoPago, setIdMetodoPago] = useState('');
+  const { data: mediosPago = [] } = useQuery<{ id: string; codigo: string; nombre: string }[]>({
+    queryKey: ['medios-pago'],
+    queryFn: () => api('/medios-pago'),
+    staleTime: 5 * 60_000,
+  });
+  useEffect(() => {
+    if (!idMetodoPago && mediosPago.length) {
+      setIdMetodoPago((mediosPago.find((m) => m.codigo === 'EFECTIVO') || mediosPago[0]).id);
+    }
+  }, [mediosPago, idMetodoPago]);
   const [items, setItems] = useState<ItemVenta[]>([]);
   const [observaciones, setObservaciones] = useState('');
 
@@ -105,6 +118,28 @@ export default function NuevaRemisionPage() {
     queryFn: () => api<any[]>(`/clientes/buscar?q=${encodeURIComponent(clienteSearch)}`),
     enabled: clienteSearch.length >= 2,
   });
+
+  // Cliente por defecto: Consumidor final (documento 222222222222, migración 008)
+  const { data: consumidorFinal } = useQuery<any | null>({
+    queryKey: ['cliente-consumidor-final'],
+    queryFn: async () => {
+      const lista = await api<any[]>(`/clientes/buscar?q=${DOCUMENTO_CONSUMIDOR_FINAL}`);
+      return lista.find((c) => c.numeroDocumento === DOCUMENTO_CONSUMIDOR_FINAL) ?? null;
+    },
+    staleTime: Infinity,
+  });
+  const clienteDefectoAplicado = useRef(false);
+  useEffect(() => {
+    if (consumidorFinal && !clienteDefectoAplicado.current) {
+      clienteDefectoAplicado.current = true;
+      setSelectedCliente((actual: any) => actual ?? consumidorFinal);
+    }
+  }, [consumidorFinal]);
+  const esConsumidorFinal = selectedCliente?.numeroDocumento === DOCUMENTO_CONSUMIDOR_FINAL;
+  // Al consumidor final no se le fía: siempre de contado
+  useEffect(() => {
+    if (esConsumidorFinal) setCondicionPago('CONTADO');
+  }, [esConsumidorFinal]);
 
   // Búsqueda de productos por código o nombre
   const { data: prodsEncontrados = [] } = useQuery<any[]>({
@@ -235,6 +270,9 @@ export default function NuevaRemisionPage() {
           pctIva: it.pctIva,
         })),
         observaciones: observaciones.trim() || undefined,
+        // De contado: el cobro se registra junto con la remisión (queda PAGADA)
+        pagadaDeContado: condicionPago === 'CONTADO',
+        idMetodoPago: condicionPago === 'CONTADO' ? idMetodoPago || undefined : undefined,
       };
 
       return api<{ id: string; numeroVenta: string; total: number }>('/facturas-venta', {
@@ -331,7 +369,7 @@ export default function NuevaRemisionPage() {
                     )}
                   </div>
                   <Button size="sm" variant="outline" onClick={() => setSelectedCliente(null)}>
-                    Cambiar Cliente
+                    {esConsumidorFinal ? 'Facturar a un cliente' : 'Cambiar Cliente'}
                   </Button>
                 </div>
               ) : (
@@ -342,6 +380,18 @@ export default function NuevaRemisionPage() {
                     onChange={(e) => setClienteSearch(e.target.value)}
                     helperText="Escribe al menos 2 caracteres para buscar en el directorio"
                   />
+                  {consumidorFinal && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedCliente(consumidorFinal);
+                        setClienteSearch('');
+                      }}
+                      className="text-xs text-[#1d63ed] hover:underline"
+                    >
+                      Usar Consumidor final
+                    </button>
+                  )}
                   {clientesEncontrados.length > 0 && (
                     <div className="border border-[#e2e8f0] rounded-md divide-y divide-[#f1f5f9] max-h-40 overflow-y-auto bg-white shadow-sm">
                       {clientesEncontrados.map((cli) => (
@@ -609,7 +659,8 @@ export default function NuevaRemisionPage() {
                   </button>
                   <button
                     type="button"
-                    disabled={selectedCliente?.creditoBloqueado}
+                    disabled={selectedCliente?.creditoBloqueado || esConsumidorFinal}
+                    title={esConsumidorFinal ? 'Al consumidor final solo se le vende de contado' : undefined}
                     onClick={() => setCondicionPago('CREDITO')}
                     className={`py-2 text-xs font-semibold rounded-md border text-center transition-colors ${condicionPago === 'CREDITO'
                         ? 'bg-[#eff4ff] border-[#1d63ed] text-[#1d63ed]'
@@ -619,6 +670,23 @@ export default function NuevaRemisionPage() {
                     Crédito (30 días)
                   </button>
                 </div>
+                {condicionPago === 'CONTADO' && (
+                  <div className="pt-2 space-y-1">
+                    <label className="text-[11px] font-semibold text-[#64748b] uppercase">Medio de pago</label>
+                    <select
+                      value={idMetodoPago}
+                      onChange={(e) => setIdMetodoPago(e.target.value)}
+                      className="w-full h-[34px] px-2 bg-white text-xs border border-[#e2e8f0] rounded-md"
+                    >
+                      {mediosPago.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.nombre}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-[#64748b]">La remisión queda cobrada (sin saldo pendiente).</p>
+                  </div>
+                )}
               </div>
 
               {/* Totales */}

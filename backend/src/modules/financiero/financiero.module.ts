@@ -22,10 +22,10 @@ import {
 } from './controllers/pagos-gastos-reportes.controller';
 import { ComprasService } from './compras.service';
 import { CarteraService } from './cartera.service';
-import { PagosService } from './pagos.service';
 import { GastosService } from './gastos.service';
 import { ReportesService } from './reportes.service';
 import { InventarioModule } from '../inventario/inventario.module';
+import { PagosModule } from './pagos.module';
 
 @Module({
   imports: [
@@ -42,6 +42,7 @@ import { InventarioModule } from '../inventario/inventario.module';
       MovimientoInventario,
     ]),
     InventarioModule,
+    PagosModule,
   ],
   controllers: [
     ComprasController,
@@ -50,7 +51,7 @@ import { InventarioModule } from '../inventario/inventario.module';
     GastosController,
     ReportesController,
   ],
-  providers: [ComprasService, CarteraService, PagosService, GastosService, ReportesService],
-  exports: [CarteraService, GastosService, ComprasService],
+  providers: [ComprasService, CarteraService, GastosService, ReportesService],
+  exports: [CarteraService, GastosService, ComprasService, PagosModule],
 })
 export class FinancieroModule {}

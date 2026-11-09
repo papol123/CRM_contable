@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   InternalServerErrorException,
   UnprocessableEntityException,
 } from '@nestjs/common';
@@ -26,6 +27,11 @@ import { validarPeriodoAbierto } from '../../common/periodos/periodo-contable';
 import { normalizarPaginacion, paginado } from '../../common/paginacion/paginacion';
 import { AdjuntosService, ArchivoSubido } from '../../common/archivos/adjuntos.service';
 import { AuditoriaService } from '../auditoria/auditoria.service';
+import { PagosService } from './pagos.service';
+import { MetodoPago } from '../../database/entities/metodo-pago.entity';
+
+/** Marca del pago que se crea junto con una compra pagada de contado (se anula con ella). */
+const PREFIJO_PAGO_CONTADO = 'Pago de contado de la compra';
 import { Actor } from '../auth/decorators/actor.decorator';
 import { PERMISOS_GLOBALES, asegurarPropietario, filtroPropietario } from '../../common/autorizacion/propiedad';
 
@@ -39,6 +45,7 @@ export class ComprasService {
     private readonly compraRepository: Repository<FacturaCompra>,
     private readonly adjuntos: AdjuntosService,
     private readonly auditoria: AuditoriaService,
+    private readonly pagos: PagosService,
   ) {}
 
   private totales(compra: FacturaCompra) {
@@ -133,6 +140,9 @@ export class ComprasService {
    * actualiza el costo promedio ponderado) y cuenta por pagar (saldo).
    */
   async create(dto: CreateFacturaCompraDto, actor?: Actor): Promise<any> {
+    if (dto.pagadaDeContado && actor && !actor.permisos.includes('pagos.registrar')) {
+      throw new ForbiddenException('Registrar la compra pagada de contado requiere el permiso pagos.registrar');
+    }
     const id = await this.dataSource.transaction(async (manager) => {
       const proveedor = await manager.findOne(Proveedor, { where: { id: dto.idProveedor } });
       if (!proveedor) throw new NotFoundException(`Proveedor con ID ${dto.idProveedor} no encontrado`);
@@ -241,9 +251,32 @@ export class ComprasService {
         },
         manager,
       );
+
+      // Compra de contado: el pago por el total se registra en la misma transacción
+      if (dto.pagadaDeContado && totales.total > 0) {
+        const idMetodoPago = dto.idMetodoPago || (await this.metodoEfectivo(manager));
+        await this.pagos.registrarEnTransaccion(
+          manager,
+          {
+            tipoPago: 'factura de compra',
+            idFactura: compra.id,
+            idMetodoPago,
+            monto: totales.total,
+            fechaPago: fechaEmision,
+            observaciones: `${PREFIJO_PAGO_CONTADO} ${dto.numeroFactura?.trim() || ''}`.trim(),
+          },
+          actor,
+        );
+      }
       return compra.id;
     });
     return this.findById(id);
+  }
+
+  private async metodoEfectivo(manager: EntityManager): Promise<string> {
+    const metodo = await manager.findOne(MetodoPago, { where: { codigo: 'EFECTIVO' } });
+    if (!metodo) throw new UnprocessableEntityException('Indique idMetodoPago: no existe el medio de pago EFECTIVO');
+    return metodo.id;
   }
 
   async update(id: string, dto: UpdateFacturaCompraDto, actor?: Actor): Promise<any> {
@@ -282,6 +315,24 @@ export class ComprasService {
         throw new ConflictException('La factura de compra ya se encuentra anulada');
       }
       await validarPeriodoAbierto(manager, compra.fechaEmision, 'anular la compra');
+
+      // El pago de contado que se registró junto con la compra se anula con ella.
+      // Los abonos registrados aparte (POST /pagos) se siguen exigiendo anular primero.
+      const pagosDeContado: { id_pago: string }[] = await manager.query(
+        `SELECT ap.id_pago
+           FROM aplicacion_pago_compra ap
+           JOIN pagos p ON p.id_pago = ap.id_pago
+           JOIN estados_pago ep ON ep.id_estado = p.id_estado
+          WHERE ap.id_factura_compra = $1
+            AND ep.codigo <> 'ANULADO'
+            AND p.observaciones LIKE $2
+            AND NOT EXISTS (SELECT 1 FROM aplicacion_pago_compra o
+                             WHERE o.id_pago = ap.id_pago AND o.id_factura_compra <> $1)`,
+        [id, `${PREFIJO_PAGO_CONTADO}%`],
+      );
+      for (const { id_pago } of pagosDeContado) {
+        await this.pagos.anularEnTransaccion(manager, id_pago, `Anulación de la compra: ${motivo}`, actor);
+      }
 
       const [saldo] = await consultarSaldosCompra(manager, { id });
       if (saldo && saldo.pagado > 0) {

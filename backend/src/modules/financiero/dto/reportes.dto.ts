@@ -36,6 +36,12 @@ export class PeriodoDto {
   periodo?: string;
 }
 
+export class PeriodoParamDto {
+  @ApiProperty({ example: '2026-09', description: 'Mes YYYY-MM' })
+  @Matches(PERIODO, { message: 'El periodo debe tener el formato YYYY-MM' })
+  periodo: string;
+}
+
 export class CierreMensualDto {
   @ApiProperty({ example: '2026-09', description: 'Mes a cerrar (YYYY-MM), anterior al mes en curso' })
   @Matches(PERIODO, { message: 'El periodo debe tener el formato YYYY-MM' })
