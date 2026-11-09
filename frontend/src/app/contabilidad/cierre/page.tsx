@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Lock,
@@ -168,6 +169,15 @@ export default function CierrePage() {
           </div>
 
           <div className="flex items-center gap-3">
+            <Link href="/contabilidad/cierre/diario">
+              <Button
+                variant="primary"
+                className="bg-[#10b981] hover:bg-[#059669] text-white"
+                icon={<Clock className="w-4 h-4" />}
+              >
+                Cierre Diario
+              </Button>
+            </Link>
             <Button
               variant="outline"
               icon={<FileSpreadsheet className="w-4 h-4" />}
@@ -177,7 +187,7 @@ export default function CierrePage() {
               Exportar Inventario CSV
             </Button>
             <Button
-              variant="primary"
+              variant="outline"
               icon={<Lock className="w-4 h-4" />}
               onClick={() => {
                 setCerrarError(null);

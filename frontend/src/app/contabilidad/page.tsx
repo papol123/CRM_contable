@@ -9,7 +9,7 @@ import {
   Lock,
   ArrowRight,
   TrendingDown,
-  RefreshCw,
+  Clock,
 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card } from '@/components/ui/Card';
@@ -17,6 +17,12 @@ import { Button } from '@/components/ui/Button';
 
 export default function ContabilidadHubPage() {
   const modulos = [
+    {
+      title: 'Cierre Diario y Arqueo de Caja',
+      description: 'Centralización diaria: remisiones, facturado anterior, gastos, compras y cuadre en una sola página.',
+      href: '/contabilidad/cierre/diario',
+      icon: <Clock className="w-6 h-6 text-[#10b981]" />,
+    },
     {
       title: 'Cartera y Recibos de Caja',
       description: 'Gestión de cobros, registro de abonos y control de mora de clientes.',
@@ -27,19 +33,13 @@ export default function ContabilidadHubPage() {
       title: 'Liquidación de Nómina',
       description: 'Cálculo de novedades, horas extras, desprendibles y dispersión salarial.',
       href: '/contabilidad/nomina',
-      icon: <Calculator className="w-6 h-6 text-[#10b981]" />,
+      icon: <Calculator className="w-6 h-6 text-[#8b5cf6]" />,
     },
     {
       title: 'Cierre Contable y Balances',
       description: 'Cierres mensuales inmutables, estados de resultados y exportaciones CSV.',
       href: '/contabilidad/cierre',
       icon: <Lock className="w-6 h-6 text-[#f59e0b]" />,
-    },
-    {
-      title: 'Integración Externa y Reversas',
-      description: 'Monitoreo de sincronizaciones contables y reversas compensatorias.',
-      href: '/contabilidad/siigo',
-      icon: <RefreshCw className="w-6 h-6 text-[#64748b]" />,
     },
   ];
 

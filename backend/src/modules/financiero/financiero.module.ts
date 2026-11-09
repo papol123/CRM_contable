@@ -51,6 +51,6 @@ import { InventarioModule } from '../inventario/inventario.module';
     ReportesController,
   ],
   providers: [ComprasService, CarteraService, PagosService, GastosService, ReportesService],
-  exports: [CarteraService],
+  exports: [CarteraService, GastosService, ComprasService],
 })
 export class FinancieroModule {}

@@ -25,6 +25,22 @@ async function main() {
   });
 
   const fs = require('fs');
+  const pidFile = path.join(DIRECTORIO, 'postmaster.pid');
+  if (fs.existsSync(pidFile)) {
+    try {
+      const pid = parseInt(fs.readFileSync(pidFile, 'utf8').split('\n')[0].trim(), 10);
+      if (pid) {
+        try {
+          process.kill(pid, 0);
+        } catch {
+          fs.unlinkSync(pidFile);
+        }
+      }
+    } catch {
+      // Ignorar errores al leer el pidFile
+    }
+  }
+
   if (!fs.existsSync(path.join(DIRECTORIO, 'PG_VERSION'))) await pg.initialise();
   await pg.start();
 

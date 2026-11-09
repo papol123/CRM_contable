@@ -1,0 +1,16 @@
+{
+  "name": "crm-contable-root",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Apex Ledger - CRM y ERP Contable de Repuestos Automotrices",
+  "scripts": {
+    "start": "powershell -ExecutionPolicy Bypass -File ./iniciar.ps1",
+    "start:local": "powershell -ExecutionPolicy Bypass -File ./iniciar.ps1 -Local",
+    "db": "npm --prefix backend run db:local",
+    "db:migrate": "npm --prefix backend run db:migrate",
+    "db:migrate:local": "npm --prefix backend run db:migrate:local",
+    "db:migrate:nube": "npm --prefix backend run db:migrate",
+    "backend": "npm --prefix backend run start:dev",
+    "frontend": "npm --prefix frontend run dev"
+  }
+}

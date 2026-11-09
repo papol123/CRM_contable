@@ -160,13 +160,15 @@ export class FacturasVentaService {
   calcular(dto: CalcularFacturaDto) {
     const totales = calcularTotales(dto.items);
     const retefuente = redondear(totales.subtotalNeto * ((dto.porcentajeRetefuente || 0) / 100));
+    const total = redondear(totales.subtotalNeto + totales.totalIva - retefuente);
     return {
       subtotal: totales.subtotal,
       totalDescuento: totales.totalDescuento,
       subtotalNeto: totales.subtotalNeto,
       totalIva: totales.totalIva,
       retefuente,
-      totalPagar: redondear(totales.subtotalNeto + totales.totalIva - retefuente),
+      total,
+      totalPagar: total,
       items: dto.items.map((item) => ({ ...item, ...calcularLinea(item) })),
     };
   }

@@ -33,16 +33,18 @@ Set-Location $PSScriptRoot
 if (-not $Bucket) { $Bucket = "$ProjectId-crm-adjuntos" }
 
 function Paso($texto) { Write-Host "`n==> $texto" -ForegroundColor Cyan }
-function Gcloud { & gcloud @args; if ($LASTEXITCODE -ne 0) { throw "Falló: gcloud $args" } }
+# Ruta del ejecutable real. PowerShell no distingue mayúsculas: una función llamada "Gcloud"
+# se llamaría a sí misma en vez de al programa (desbordamiento de la profundidad de llamada).
+$GcloudExe = (Get-Command gcloud -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1).Source
+if (-not $GcloudExe) {
+  throw 'No se encontró gcloud. Instale Google Cloud SDK: https://cloud.google.com/sdk/docs/install y ejecute "gcloud auth login".'
+}
+function Invoke-Gcloud { & $GcloudExe @args; if ($LASTEXITCODE -ne 0) { throw "Falló: gcloud $args" } }
 # true si el comando gcloud termina bien; sus errores no detienen el script
 function Existe {
   $anterior = $ErrorActionPreference
   $ErrorActionPreference = 'Continue'
-  try { & gcloud @args 2>&1 | Out-Null; return ($LASTEXITCODE -eq 0) } finally { $ErrorActionPreference = $anterior }
-}
-
-if (-not (Get-Command gcloud -ErrorAction SilentlyContinue)) {
-  throw 'No se encontró gcloud. Instale Google Cloud SDK: https://cloud.google.com/sdk/docs/install y ejecute "gcloud auth login".'
+  try { & $GcloudExe @args 2>&1 | Out-Null; return ($LASTEXITCODE -eq 0) } finally { $ErrorActionPreference = $anterior }
 }
 
 # ─── Valores del .env local (solo usuario, base y secretos) ──────────────────
@@ -55,15 +57,15 @@ foreach ($clave in 'DB_USER', 'DB_PASSWORD', 'DB_NAME', 'JWT_SECRET') {
 }
 
 Paso "Proyecto $ProjectId y APIs necesarias"
-Gcloud config set project $ProjectId | Out-Null
-Gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com `
+Invoke-Gcloud config set project $ProjectId | Out-Null
+Invoke-Gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com `
   sqladmin.googleapis.com secretmanager.googleapis.com storage.googleapis.com
 
-$conexionSql = (& gcloud sql instances describe $InstanciaSql --format='value(connectionName)')
+$conexionSql = (& $GcloudExe sql instances describe $InstanciaSql --format='value(connectionName)')
 if (-not $conexionSql) { throw "No se encontró la instancia Cloud SQL '$InstanciaSql' en el proyecto $ProjectId" }
 Write-Host "Cloud SQL: $conexionSql"
 
-$numeroProyecto = (& gcloud projects describe $ProjectId --format='value(projectNumber)')
+$numeroProyecto = (& $GcloudExe projects describe $ProjectId --format='value(projectNumber)')
 $cuentaServicio = "$numeroProyecto-compute@developer.gserviceaccount.com"
 
 # ─── Secret Manager ──────────────────────────────────────────────────────────
@@ -73,14 +75,14 @@ function Guardar-Secreto($nombre, $valor) {
     # Sin salto de línea final: el secreto debe ser exactamente el valor
     [IO.File]::WriteAllText($temporal.FullName, $valor)
     if (-not (Existe secrets describe $nombre)) {
-      Gcloud secrets create $nombre --replication-policy=automatic --data-file=$($temporal.FullName)
+      Invoke-Gcloud secrets create $nombre --replication-policy=automatic --data-file=$($temporal.FullName)
     } elseif ($ActualizarSecretos) {
-      Gcloud secrets versions add $nombre --data-file=$($temporal.FullName)
+      Invoke-Gcloud secrets versions add $nombre --data-file=$($temporal.FullName)
     } else {
       Write-Host "Secreto $nombre ya existe (use -ActualizarSecretos para reemplazarlo)"
     }
   } finally { Remove-Item $temporal -Force }
-  Gcloud secrets add-iam-policy-binding $nombre --member="serviceAccount:$cuentaServicio" `
+  Invoke-Gcloud secrets add-iam-policy-binding $nombre --member="serviceAccount:$cuentaServicio" `
     --role=roles/secretmanager.secretAccessor --quiet | Out-Null
 }
 
@@ -96,14 +98,14 @@ if ($envVars['SMTP_PASSWORD']) {
 # ─── Cloud Storage ───────────────────────────────────────────────────────────
 Paso "Bucket gs://$Bucket"
 if (-not (Existe storage buckets describe "gs://$Bucket")) {
-  Gcloud storage buckets create "gs://$Bucket" --location=$Region --uniform-bucket-level-access --public-access-prevention
+  Invoke-Gcloud storage buckets create "gs://$Bucket" --location=$Region --uniform-bucket-level-access --public-access-prevention
 }
-Gcloud storage buckets add-iam-policy-binding "gs://$Bucket" --member="serviceAccount:$cuentaServicio" `
+Invoke-Gcloud storage buckets add-iam-policy-binding "gs://$Bucket" --member="serviceAccount:$cuentaServicio" `
   --role=roles/storage.objectAdmin | Out-Null
 
 # Conexión a Cloud SQL y respaldos bajo demanda (POST /admin/backups)
 foreach ($rol in 'roles/cloudsql.client', 'roles/cloudsql.editor') {
-  Gcloud projects add-iam-policy-binding $ProjectId --member="serviceAccount:$cuentaServicio" --role=$rol --condition=None --quiet | Out-Null
+  Invoke-Gcloud projects add-iam-policy-binding $ProjectId --member="serviceAccount:$cuentaServicio" --role=$rol --condition=None --quiet | Out-Null
 }
 
 # ─── Despliegue ──────────────────────────────────────────────────────────────
@@ -128,7 +130,7 @@ $variables = '^@^' + (@(
     'JOBS_WORKER=true'
   ) -join '@')
 
-Gcloud run deploy $Servicio `
+Invoke-Gcloud run deploy $Servicio `
   --source . `
   --region $Region `
   --allow-unauthenticated `
@@ -140,7 +142,7 @@ Gcloud run deploy $Servicio `
   --memory 1Gi `
   --timeout 300
 
-$url = (& gcloud run services describe $Servicio --region $Region --format='value(status.url)')
+$url = (& $GcloudExe run services describe $Servicio --region $Region --format='value(status.url)')
 
 # ─── Entorno de Bruno ────────────────────────────────────────────────────────
 $entornoBruno = Join-Path $PSScriptRoot '..\bruno\environments\Cloud Run.bru'

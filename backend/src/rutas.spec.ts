@@ -63,6 +63,14 @@ describe('Rutas registradas (catálogo §34: prueba estructural)', () => {
     expect(permisoDe('GET /proveedores/buscar')).toEqual(['terceros.consultar']);
   });
 
+  it('el cierre diario (vista global de caja) exige cierres.ejecutar', () => {
+    const rutas = todas.filter((r) => r.ruta.startsWith('/cierres-diarios'));
+    expect(rutas.map((r) => `${r.http} ${r.ruta}`).sort()).toEqual(
+      ['GET /cierres-diarios', 'GET /cierres-diarios/resumen', 'PUT /cierres-diarios/:fecha'].sort(),
+    );
+    for (const r of rutas) expect(r.permisos).toEqual(['cierres.ejecutar']);
+  });
+
   it('la auditoría es de solo lectura (sin POST/PATCH/DELETE salvo exportar)', () => {
     const escrituras = todas.filter((r) => r.ruta.startsWith('/auditoria') && r.http !== 'GET');
     expect(escrituras.map((r) => `${r.http} ${r.ruta}`)).toEqual(['POST /auditoria/exportar']);
