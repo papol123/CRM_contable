@@ -82,19 +82,55 @@ export class ProductosService {
     );
   }
 
-  async buscar(q: string): Promise<Producto[]> {
-    return this.productoRepository
+  async buscar(q: string): Promise<any[]> {
+    const rawTokens = (q || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (!rawTokens.length) return [];
+
+    const qb = this.productoRepository
       .createQueryBuilder('p')
       .leftJoinAndSelect('p.categoria', 'cat')
+      .leftJoinAndSelect('p.impuesto', 'imp')
       .leftJoinAndSelect('p.precios', 'pr')
       .leftJoinAndSelect('pr.lista', 'pl')
-      .where('(LOWER(p.nombre) LIKE :q OR LOWER(p.codigo) LIKE :q)', {
-        q: `%${q.trim().toLowerCase()}%`,
-      })
-      .andWhere('p.activo = true')
-      .orderBy('p.nombre', 'ASC')
-      .take(15)
-      .getMany();
+      .where('p.activo = true');
+
+    rawTokens.forEach((token, idx) => {
+      qb.andWhere(`(LOWER(p.nombre) LIKE :tok_${idx} OR LOWER(p.codigo) LIKE :tok_${idx})`, {
+        [`tok_${idx}`]: `%${token}%`,
+      });
+    });
+
+    const prods = await qb.orderBy('p.nombre', 'ASC').take(20).getMany();
+    if (!prods.length) return [];
+
+    const ids = prods.map((p) => p.id);
+    const saldos = new Map<string, number>();
+    const filas = await this.dataSource.query(
+      `SELECT m.id_producto, COALESCE(SUM(${SQL_CANTIDAD_CON_SIGNO}), 0) AS saldo
+         FROM movimientos_inventario m
+        WHERE m.id_producto = ANY($1::uuid[])
+        GROUP BY m.id_producto`,
+      [ids],
+    );
+    for (const f of filas) saldos.set(f.id_producto, Number(f.saldo));
+
+    return prods.map((p) => {
+      const precioPub =
+        p.precios?.find(
+          (pr) =>
+            pr.lista?.nombre?.toLowerCase().includes('público') ||
+            pr.lista?.nombre?.toLowerCase().includes('publico'),
+        ) || p.precios?.[0];
+      const precioUnit = precioPub ? Number(precioPub.precio) : 0;
+      const saldo = saldos.get(p.id) ?? 0;
+      return {
+        ...p,
+        precio: precioUnit,
+        precioVenta: precioUnit,
+        disponible: saldo,
+        saldoTotal: saldo,
+      };
+    });
   }
 
   /** Detalle con precio, impuesto y saldos por bodega. */

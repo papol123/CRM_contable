@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery, useMutation } from '@tanstack/react-query';
@@ -21,6 +21,7 @@ import { BannerError } from '@/components/ui/BannerError';
 import { useToast } from '@/components/ui/Toast';
 import { api, ApiError, ProblemDetails, reportSecurityMetric } from '@/lib/api';
 import { formatCOP } from '@/lib/format';
+import { fechaLocalHoy, leerOrigenCierre, rutaCierre } from '@/lib/cierre-diario';
 
 const MAX_XML_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB según directrices de seguridad (RFC 9110 §413)
 
@@ -38,7 +39,15 @@ export default function NuevaCompraPage() {
   // Formulario de Compra
   const [idProveedor, setIdProveedor] = useState('');
   const [numeroFactura, setNumeroFactura] = useState('');
-  const [fechaEmision, setFechaEmision] = useState(new Date().toISOString().split('T')[0]);
+  const [fechaEmision, setFechaEmision] = useState(fechaLocalHoy());
+
+  // Si viene del Cierre Diario, la compra toma la fecha del cierre y vuelve a él al registrar
+  const [fechaCierreOrigen, setFechaCierreOrigen] = useState<string | null>(null);
+  useEffect(() => {
+    const fecha = leerOrigenCierre();
+    setFechaCierreOrigen(fecha);
+    if (fecha) setFechaEmision(fecha);
+  }, []);
   const [idBodega, setIdBodega] = useState('');
   const [pctRetefuente, setPctRetefuente] = useState('2.5');
   const [pctReteIva, setPctReteIva] = useState('15');
@@ -169,7 +178,7 @@ export default function NuevaCompraPage() {
     },
     onSuccess: (data: any) => {
       success('Compra Registrada', `Factura ${numeroFactura} registrada. Se generó la entrada a inventario y la CxP.`);
-      router.push('/proveedores');
+      router.push(fechaCierreOrigen ? rutaCierre(fechaCierreOrigen) : '/proveedores');
     },
     onError: (err: any) => {
       if (err instanceof ApiError) setSubmitError(err.problem);
@@ -190,6 +199,11 @@ export default function NuevaCompraPage() {
             <p className="text-xs text-[#64748b]">
               Carga automática mediante XML UBL 2.1 o diligenciamiento asistido
             </p>
+            {fechaCierreOrigen && (
+              <p className="text-xs font-semibold text-emerald-700">
+                Para el cierre diario del {fechaCierreOrigen}: al registrarla volverá al cierre.
+              </p>
+            )}
           </div>
         </div>
 

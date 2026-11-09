@@ -23,6 +23,7 @@ import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import { BannerError } from '@/components/ui/BannerError';
 import { useToast } from '@/components/ui/Toast';
+import { fechaLocalHoy, leerOrigenCierre, rutaCierre, sumarDiasISO } from '@/lib/cierre-diario';
 import { api, ApiError, ProblemDetails } from '@/lib/api';
 import { formatCOP } from '@/lib/format';
 
@@ -34,12 +35,20 @@ interface ItemVenta {
   valorUnitario: number;
   pctDescuento: number;
   pctIva: number;
+  ivaIncluido?: boolean;
+  precioOriginal?: number;
   disponible?: number;
 }
 
 export default function NuevaRemisionPage() {
   const router = useRouter();
   const { success } = useToast();
+
+  // Si viene del Cierre Diario, la remisión toma la fecha del cierre y vuelve a él al emitir
+  const [fechaCierreOrigen, setFechaCierreOrigen] = useState<string | null>(null);
+  useEffect(() => {
+    setFechaCierreOrigen(leerOrigenCierre());
+  }, []);
 
   // Clave de idempotencia única para este borrador (Regla §1.5)
   const [idempotencyKey, setIdempotencyKey] = useState<string>('');
@@ -56,6 +65,7 @@ export default function NuevaRemisionPage() {
   const [selectedProd, setSelectedProd] = useState<any | null>(null);
   const [itemCant, setItemCant] = useState(1);
   const [itemPrecio, setItemPrecio] = useState(0);
+  const [ivaIncluido, setIvaIncluido] = useState<boolean>(true);
 
   // Totales simulados con /calcular
   const [simulacion, setSimulacion] = useState<{
@@ -96,20 +106,46 @@ export default function NuevaRemisionPage() {
     enabled: clienteSearch.length >= 2,
   });
 
-  // Búsqueda de productos
+  // Búsqueda de productos por código o nombre
   const { data: prodsEncontrados = [] } = useQuery<any[]>({
     queryKey: ['buscar-prods-venta', prodSearch],
-    queryFn: () => api<any[]>(`/productos/buscar?q=${encodeURIComponent(prodSearch)}`),
-    enabled: prodSearch.length >= 2,
+    queryFn: () => api<any[]>(`/productos/buscar?q=${encodeURIComponent(prodSearch.trim())}`),
+    enabled:
+      prodSearch.trim().length >= 2 &&
+      (!selectedProd || prodSearch !== `${selectedProd.codigo} — ${selectedProd.nombre}`),
   });
 
-  // Cálculo en tiempo real con debounce
+  // Cálculo en tiempo real
   useEffect(() => {
     if (items.length === 0) {
-      setSimulacion({});
+      setSimulacion({
+        subtotalNeto: 0,
+        totalIva: 0,
+        totalRetefuente: 0,
+        total: 0,
+      });
       return;
     }
 
+    // Cálculo inmediato en frontend para respuesta instantánea
+    const subLocal = items.reduce(
+      (acc, it) => acc + it.cantidad * it.valorUnitario * (1 - (it.pctDescuento || 0) / 100),
+      0,
+    );
+    const ivaLocal = items.reduce((acc, it) => {
+      const base = it.cantidad * it.valorUnitario * (1 - (it.pctDescuento || 0) / 100);
+      return acc + (base * (it.pctIva ?? 19)) / 100;
+    }, 0);
+    const totalLocal = subLocal + ivaLocal;
+
+    setSimulacion({
+      subtotalNeto: subLocal,
+      totalIva: ivaLocal,
+      totalRetefuente: 0,
+      total: totalLocal,
+    });
+
+    // Sincronización con backend /facturas-venta/calcular
     const timer = setTimeout(async () => {
       setCalculating(true);
       try {
@@ -118,8 +154,8 @@ export default function NuevaRemisionPage() {
             idProducto: it.idProducto,
             cantidad: it.cantidad,
             valorUnitario: it.valorUnitario,
-            pctDescuento: it.pctDescuento,
-            pctIva: it.pctIva,
+            pctDescuento: it.pctDescuento || 0,
+            pctIva: it.pctIva ?? 19,
           })),
           porcentajeRetefuente: 0,
         };
@@ -127,31 +163,46 @@ export default function NuevaRemisionPage() {
           method: 'POST',
           body: JSON.stringify(payload),
         });
-        setSimulacion(res);
-      } catch {
-        // Cálculo fallback en cliente
-        const sub = items.reduce((acc, it) => acc + it.cantidad * it.valorUnitario, 0);
-        const iva = items.reduce((acc, it) => acc + (it.cantidad * it.valorUnitario * it.pctIva) / 100, 0);
-        setSimulacion({ subtotalNeto: sub, totalIva: iva, total: sub + iva });
+        const totalCalculado =
+          res.total ?? res.totalPagar ?? ((res.subtotalNeto ?? subLocal) + (res.totalIva ?? ivaLocal));
+        setSimulacion({
+          subtotalNeto: res.subtotalNeto ?? subLocal,
+          totalIva: res.totalIva ?? ivaLocal,
+          totalRetefuente: res.retefuente ?? 0,
+          total: totalCalculado,
+        });
+      } catch (err) {
+        console.warn('Cálculo backend no disponible, usando cálculo local:', err);
       } finally {
         setCalculating(false);
       }
-    }, 400);
+    }, 250);
 
     return () => clearTimeout(timer);
   }, [items]);
 
   const handleAddItem = () => {
     if (!selectedProd) return;
+    const precioIngresado =
+      itemPrecio > 0 ? itemPrecio : selectedProd.precioVenta || selectedProd.precio || 0;
+    const pctIva = selectedProd.impuesto?.porcentaje ? Number(selectedProd.impuesto.porcentaje) : 19;
+
+    // Si IVA está incluido, desglosamos la base imponible: base = precioIngresado / (1 + pctIva/100)
+    const valorUnitarioBase = ivaIncluido
+      ? Math.round((precioIngresado / (1 + pctIva / 100)) * 100) / 100
+      : precioIngresado;
+
     const newItem: ItemVenta = {
-      idProducto: selectedProd.idProducto || selectedProd.id,
+      idProducto: selectedProd.id || selectedProd.idProducto,
       codigo: selectedProd.codigo,
       nombre: selectedProd.nombre || selectedProd.descripcion,
       cantidad: itemCant,
-      valorUnitario: itemPrecio || selectedProd.precioVenta || selectedProd.precio || 10000,
+      valorUnitario: valorUnitarioBase,
       pctDescuento: 0,
-      pctIva: 19,
-      disponible: selectedProd.disponible,
+      pctIva: pctIva,
+      ivaIncluido: ivaIncluido,
+      precioOriginal: precioIngresado,
+      disponible: selectedProd.disponible ?? selectedProd.saldoTotal,
     };
     setItems((prev) => [...prev, newItem]);
     setSelectedProd(null);
@@ -167,16 +218,14 @@ export default function NuevaRemisionPage() {
   // Enviar Remisión
   const submitMutation = useMutation({
     mutationFn: async () => {
-      const today = new Date().toISOString().split('T')[0];
-      // Si es crédito: 30 días posteriores
-      const vencimiento =
-        condicionPago === 'CONTADO'
-          ? today
-          : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const fechaDocumento = fechaCierreOrigen || fechaLocalHoy();
+      // Si es crédito: 30 días posteriores a la expedición
+      const vencimiento = condicionPago === 'CONTADO' ? fechaDocumento : sumarDiasISO(fechaDocumento, 30);
 
       const payload = {
         idCliente: selectedCliente.id,
         idBodega: selectedBodegaId || (bodegas[0]?.id ?? ''),
+        ...(fechaCierreOrigen ? { fechaExpedicion: fechaCierreOrigen } : {}),
         fechaVencimiento: vencimiento,
         items: items.map((it) => ({
           idProducto: it.idProducto,
@@ -201,7 +250,7 @@ export default function NuevaRemisionPage() {
       if (typeof window !== 'undefined') {
         localStorage.removeItem('borrador:remision:current_key');
       }
-      router.push('/facturacion/ventas');
+      router.push(fechaCierreOrigen ? rutaCierre(fechaCierreOrigen) : '/facturacion/ventas');
     },
     onError: (err: any) => {
       if (err instanceof ApiError) {
@@ -223,6 +272,11 @@ export default function NuevaRemisionPage() {
             </Link>
             <div>
               <h1 className="text-xl font-bold text-[#0f172a] tracking-tight">Nueva Remisión de Venta</h1>
+              {fechaCierreOrigen && (
+                <p className="text-xs font-semibold text-emerald-700">
+                  Para el cierre diario del {fechaCierreOrigen}: se emitirá con esa fecha y volverá al cierre.
+                </p>
+              )}
               <p className="text-xs text-[#64748b]">
                 Documento de salida comercial con reserva de inventario
               </p>
@@ -244,13 +298,13 @@ export default function NuevaRemisionPage() {
             rceAction={
               submitError.status === 422 && submitError.type?.includes('credito-bloqueado')
                 ? {
-                    label: 'Cambiar a Contado y Reemitir',
-                    onClick: () => {
-                      setCondicionPago('CONTADO');
-                      setIdempotencyKey(crypto.randomUUID());
-                      setSubmitError(null);
-                    },
-                  }
+                  label: 'Cambiar a Contado y Reemitir',
+                  onClick: () => {
+                    setCondicionPago('CONTADO');
+                    setIdempotencyKey(crypto.randomUUID());
+                    setSubmitError(null);
+                  },
+                }
                 : undefined
             }
           />
@@ -321,30 +375,72 @@ export default function NuevaRemisionPage() {
                 2. Repuestos a Facturar *
               </span>
 
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
-                <div className="sm:col-span-2 space-y-1">
-                  <label className="text-[11px] font-semibold text-[#64748b] uppercase">Repuesto</label>
+              <div className="grid grid-cols-1 sm:grid-cols-6 gap-3 items-end">
+                <div className="sm:col-span-2 space-y-1 relative">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[11px] font-semibold text-[#64748b] uppercase">
+                      Repuesto (Código o Nombre)
+                    </label>
+                    {selectedProd && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedProd(null);
+                          setProdSearch('');
+                          setItemPrecio(0);
+                        }}
+                        className="text-[10px] text-[#1d63ed] hover:underline"
+                      >
+                        Limpiar
+                      </button>
+                    )}
+                  </div>
                   <Input
-                    placeholder="Buscar por código o nombre..."
+                    placeholder="Buscar por código o nombre (ej. Pastillas, FIL-01)..."
                     value={prodSearch}
-                    onChange={(e) => setProdSearch(e.target.value)}
+                    onChange={(e) => {
+                      setProdSearch(e.target.value);
+                      if (selectedProd) setSelectedProd(null);
+                    }}
                   />
                   {prodsEncontrados.length > 0 && !selectedProd && (
-                    <div className="border border-[#e2e8f0] rounded-md divide-y divide-[#f1f5f9] max-h-36 overflow-y-auto bg-white shadow-sm absolute z-10 w-80">
-                      {prodsEncontrados.map((p) => (
-                        <div
-                          key={p.id || p.idProducto}
-                          onClick={() => {
-                            setSelectedProd(p);
-                            setItemPrecio(p.precioVenta || p.precio || 15000);
-                            setProdSearch(`${p.codigo} — ${p.nombre || ''}`);
-                          }}
-                          className="p-2 hover:bg-[#eff4ff] cursor-pointer text-xs flex justify-between"
-                        >
-                          <span className="font-semibold text-[#0f172a]">{p.codigo}</span>
-                          <span className="text-[#64748b]">Disp: {p.disponible ?? '—'}</span>
-                        </div>
-                      ))}
+                    <div className="border border-[#e2e8f0] rounded-md divide-y divide-[#f1f5f9] max-h-56 overflow-y-auto bg-white shadow-xl absolute z-30 w-full sm:w-[420px] mt-1 left-0">
+                      {prodsEncontrados.map((p) => {
+                        const precioProducto =
+                          p.precioVenta ??
+                          p.precio ??
+                          (p.precios?.[0]?.precio ? Number(p.precios[0].precio) : 0);
+                        const stockActual = p.disponible ?? p.saldoTotal ?? 0;
+                        return (
+                          <div
+                            key={p.id || p.idProducto}
+                            onClick={() => {
+                              setSelectedProd(p);
+                              setItemPrecio(precioProducto);
+                              setProdSearch(`${p.codigo} — ${p.nombre || ''}`);
+                            }}
+                            className="p-2.5 hover:bg-[#eff4ff] cursor-pointer text-xs flex justify-between items-center transition-colors"
+                          >
+                            <div className="flex flex-col pr-2">
+                              <span className="font-semibold text-[#0f172a]">{p.codigo}</span>
+                              <span className="text-[#334155] font-medium">{p.nombre}</span>
+                              <span className="text-[11px] text-[#64748b]">
+                                {p.categoria?.nombre ? `${p.categoria.nombre} • ` : ''}Precio: {formatCOP(precioProducto)}
+                              </span>
+                            </div>
+                            <div className="text-right whitespace-nowrap">
+                              <span
+                                className={`text-[11px] font-semibold px-2 py-0.5 rounded ${stockActual > 0
+                                    ? 'bg-emerald-50 text-emerald-700'
+                                    : 'bg-amber-50 text-amber-700'
+                                  }`}
+                              >
+                                Stock: {stockActual}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -359,13 +455,59 @@ export default function NuevaRemisionPage() {
                   />
                 </div>
 
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-[#64748b] uppercase">Precio Unit. (COP)</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={itemPrecio}
+                    onChange={(e) => setItemPrecio(Math.max(0, parseFloat(e.target.value) || 0))}
+                  />
+                  {itemPrecio > 0 && (() => {
+                    const pct = selectedProd?.impuesto?.porcentaje ? Number(selectedProd.impuesto.porcentaje) : 19;
+                    return (
+                      <p className="text-[10px] text-[#64748b] truncate">
+                        {ivaIncluido
+                          ? `Base: ${formatCOP(Math.round((itemPrecio / (1 + pct / 100)) * 100) / 100)}`
+                          : `+IVA (${pct}%): ${formatCOP(Math.round((itemPrecio * pct) / 100))}`}
+                      </p>
+                    );
+                  })()}
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-[#64748b] uppercase">Modo IVA</label>
+                  <button
+                    type="button"
+                    onClick={() => setIvaIncluido(!ivaIncluido)}
+                    className={`w-full h-[38px] px-2 text-xs font-semibold rounded-md border flex items-center justify-center gap-1.5 transition-all ${
+                      ivaIncluido
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100 shadow-sm'
+                        : 'bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100'
+                    }`}
+                    title={
+                      ivaIncluido
+                        ? 'El precio digitado ya incluye IVA (se desglosará la base automáticamente)'
+                        : 'Al precio digitado se le sumará el IVA adicionalmente'
+                    }
+                  >
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        ivaIncluido ? 'bg-emerald-500' : 'bg-slate-400'
+                      }`}
+                    />
+                    <span>{ivaIncluido ? 'IVA Incluido' : '+ Más IVA'}</span>
+                  </button>
+                </div>
+
                 <Button
                   variant="secondary"
                   onClick={handleAddItem}
-                  disabled={!selectedProd}
+                  disabled={!selectedProd || itemPrecio <= 0}
                   className="h-[38px]"
                 >
-                  Agregar Ítem
+                  <Plus className="w-4 h-4 mr-1" />
+                  Agregar
                 </Button>
               </div>
 
@@ -391,9 +533,23 @@ export default function NuevaRemisionPage() {
                       {items.map((it, idx) => (
                         <tr key={idx}>
                           <td className="py-2.5 px-3 font-semibold text-[#0f172a]">{it.codigo}</td>
-                          <td className="py-2.5 px-3 text-[#424655]">{it.nombre}</td>
+                          <td className="py-2.5 px-3 text-[#424655]">
+                            <span>{it.nombre}</span>
+                            {it.ivaIncluido && (
+                              <span className="ml-1.5 text-[10px] text-emerald-600 font-medium">
+                                (IVA incl.)
+                              </span>
+                            )}
+                          </td>
                           <td className="py-2.5 px-3 text-right font-medium tabular-nums">{it.cantidad}</td>
-                          <td className="py-2.5 px-3 text-right tabular-nums">{formatCOP(it.valorUnitario)}</td>
+                          <td className="py-2.5 px-3 text-right tabular-nums">
+                            <div>{formatCOP(it.valorUnitario)}</div>
+                            {it.ivaIncluido && it.precioOriginal && (
+                              <div className="text-[10px] text-[#64748b]">
+                                Orig: {formatCOP(it.precioOriginal)}
+                              </div>
+                            )}
+                          </td>
                           <td className="py-2.5 px-3 text-right font-semibold text-[#0f172a] tabular-nums">
                             {formatCOP(it.cantidad * it.valorUnitario)}
                           </td>
@@ -444,11 +600,10 @@ export default function NuevaRemisionPage() {
                   <button
                     type="button"
                     onClick={() => setCondicionPago('CONTADO')}
-                    className={`py-2 text-xs font-semibold rounded-md border text-center transition-colors ${
-                      condicionPago === 'CONTADO'
+                    className={`py-2 text-xs font-semibold rounded-md border text-center transition-colors ${condicionPago === 'CONTADO'
                         ? 'bg-[#eff4ff] border-[#1d63ed] text-[#1d63ed]'
                         : 'bg-white border-[#e2e8f0] text-[#64748b]'
-                    }`}
+                      }`}
                   >
                     Contado (Hoy)
                   </button>
@@ -456,11 +611,10 @@ export default function NuevaRemisionPage() {
                     type="button"
                     disabled={selectedCliente?.creditoBloqueado}
                     onClick={() => setCondicionPago('CREDITO')}
-                    className={`py-2 text-xs font-semibold rounded-md border text-center transition-colors ${
-                      condicionPago === 'CREDITO'
+                    className={`py-2 text-xs font-semibold rounded-md border text-center transition-colors ${condicionPago === 'CREDITO'
                         ? 'bg-[#eff4ff] border-[#1d63ed] text-[#1d63ed]'
                         : 'bg-white border-[#e2e8f0] text-[#64748b] disabled:opacity-40 disabled:cursor-not-allowed'
-                    }`}
+                      }`}
                   >
                     Crédito (30 días)
                   </button>

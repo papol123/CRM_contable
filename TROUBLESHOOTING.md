@@ -19,9 +19,20 @@ Datos del entorno en la nube:
 
 ## 1. Conexión a Cloud SQL
 
+**Destino por defecto: Cloud SQL** (`backend/.env`). `npm start`, `npm run backend`,
+`npm run db:migrate` y `npm run seed` usan la nube. La base embebida local
+(`backend/.env.local`, 127.0.0.1:54329) es opcional y explícita:
+`npm run start:local` (raíz), o en `backend/`: `npm run start:local`, `npm run db:migrate:local`,
+`npm run seed:local` (con `npm run db:local` corriendo en otra terminal).
+
 ### 1.1 `connect ETIMEDOUT 34.23.121.79:5432` al compilar o correr el backend en local
 - **Causa:** la IP pública de su red cambió y Cloud SQL solo acepta las redes autorizadas.
-- **Solución:** averigüe su IP (`curl ifconfig.me`) y agréguela. **`--authorized-networks` reemplaza la lista completa**: incluya las anteriores que sigan vigentes.
+  `npm start` lo detecta antes de arrancar y muestra la IP a autorizar.
+- **Solución sin gcloud (consola web):** vea su IP en https://api.ipify.org →
+  [Google Cloud Console](https://console.cloud.google.com/sql/instances/crm-contable-db/connections?project=crm-cloud-506523)
+  → SQL → `crm-contable-db` → **Conexiones** → **Redes** → *Agregar una red* → `SU_IP/32` → **Guardar**
+  (tarda 1–2 minutos). Revise también que la instancia esté *En ejecución*.
+- **Solución con gcloud:** averigüe su IP (`curl ifconfig.me`) y agréguela. **`--authorized-networks` reemplaza la lista completa**: incluya las anteriores que sigan vigentes.
   ```bash
   gcloud sql instances patch crm-contable-db --project crm-cloud-506523 \
     --authorized-networks=IP1/32,IP2/32,SU_IP_NUEVA/32

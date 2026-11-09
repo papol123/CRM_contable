@@ -23,6 +23,7 @@ import { AuditoriaInterceptor } from './modules/auditoria/auditar';
 import { ConfiguracionModule } from './modules/configuracion/configuracion.module';
 import { MantenimientoModule } from './modules/mantenimiento/mantenimiento.module';
 import { NominaModule } from './modules/nomina/nomina.module';
+import { CierreDiarioModule } from './modules/cierre-diario/cierre-diario.module';
 
 // Fuera de alcance: facturación electrónica DIAN e integración con Siigo.
 // Las ventas se emiten como remisiones con consecutivo interno.
@@ -31,7 +32,12 @@ import { NominaModule } from './modules/nomina/nomina.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: ['.env', '../.env'],
+      // Por defecto Cloud SQL (.env). Con --local o DB_DESTINO=local se usa primero
+      // .env.local (base embebida de `npm run db:local`). Igual que scripts/lib/db.js.
+      envFilePath:
+        process.argv.includes('--local') || process.env.DB_DESTINO === 'local'
+          ? ['.env.local', '.env', '../.env.local', '../.env']
+          : ['.env', '../.env'],
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
@@ -77,6 +83,7 @@ import { NominaModule } from './modules/nomina/nomina.module';
     ConfiguracionModule,
     MantenimientoModule,
     NominaModule,
+    CierreDiarioModule,
   ],
   providers: [
     // Orden de ejecución: límite de peticiones → autenticación JWT → permisos

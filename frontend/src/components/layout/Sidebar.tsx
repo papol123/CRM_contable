@@ -77,10 +77,10 @@ export function Sidebar() {
       href: '/contabilidad',
       icon: <BookOpen className="w-5 h-5 shrink-0" />,
       subItems: [
+        { title: 'Cierre Diario', href: '/contabilidad/cierre/diario', adminOnly: true, permission: 'cierres.ejecutar' },
         { title: 'Cartera y Pagos', href: '/contabilidad/cartera', permission: 'cartera.consultar' },
         { title: 'Nómina', href: '/contabilidad/nomina', adminOnly: true, permission: 'nomina.consultar' },
         { title: 'Cierre Contable', href: '/contabilidad/cierre', adminOnly: true, permission: 'cierres.ejecutar' },
-        { title: 'Siigo y Reversas', href: '/contabilidad/siigo', adminOnly: true },
       ],
     },
     {

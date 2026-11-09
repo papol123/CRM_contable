@@ -6,7 +6,7 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { crearCliente } = require('./lib/db');
+const { crearCliente, ayudaConexion } = require('./lib/db');
 
 const ESQUEMA_BASE = path.join(__dirname, '../../crm_contable_schema_postgresql_uuid.sql');
 const CARPETA_MIGRACIONES = path.join(__dirname, '../database/migrations');
@@ -17,6 +17,7 @@ const CANDADO_MIGRACIONES = 'crm_contable_migraciones';
 async function main() {
   const client = crearCliente();
   await client.connect();
+  console.log(`🔌 Base: ${process.env.DB_HOST || '127.0.0.1'}:${process.env.DB_PORT || '5432'}/${process.env.DB_NAME || 'crm_contable'}`);
 
   try {
     await client.query('SELECT pg_advisory_lock(hashtext($1))', [CANDADO_MIGRACIONES]);
@@ -68,5 +69,7 @@ async function main() {
 
 main().catch((err) => {
   console.error('❌ Error aplicando migraciones:', err.message);
+  const ayuda = ayudaConexion(err);
+  if (ayuda) console.error(`   ${ayuda}`);
   process.exit(1);
 });
