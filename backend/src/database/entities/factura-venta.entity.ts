@@ -62,6 +62,14 @@ export class FacturaVenta {
   @Column({ name: 'observaciones', type: 'text', nullable: true })
   observaciones?: string;
 
+  /** Número de la factura física (talonario) en la remisión rápida. */
+  @Column({ name: 'numero_externo', type: 'varchar', length: 40, nullable: true })
+  numeroExterno?: string | null;
+
+  /** Quién queda debiendo en un crédito a Consumidor final. */
+  @Column({ name: 'nombre_deudor', type: 'varchar', length: 150, nullable: true })
+  nombreDeudor?: string | null;
+
   @Column({ name: 'motivo_castigo', type: 'text', nullable: true })
   motivoCastigo?: string | null;
 

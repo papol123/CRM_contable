@@ -46,6 +46,8 @@ const securityHeaders = [
 
 const nextConfig = {
   reactStrictMode: true,
+  // Servidor autónomo (.next/standalone) para la imagen de Cloud Run
+  output: 'standalone',
   async headers() {
     return [
       {

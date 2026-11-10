@@ -23,11 +23,11 @@ export function configurarAplicacion(app: NestExpressApplication) {
   // Refresh token en cookie HttpOnly
   app.use(cookieParser());
 
-  // CORS: en producción solo FRONTEND_URL (lista separada por comas);
+  // CORS: en producción solo FRONTEND_URL (lista separada por comas o punto y coma);
   // en desarrollo también localhost y 127.0.0.1 en cualquier puerto
   const esProduccion = process.env.NODE_ENV === 'production';
   const origenesPermitidos = (process.env.FRONTEND_URL || '')
-    .split(',')
+    .split(/[,;]/)
     .map((o) => o.trim())
     .filter(Boolean);
 

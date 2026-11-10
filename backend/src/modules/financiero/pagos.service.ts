@@ -56,7 +56,31 @@ export class PagosService {
     if (filtros.desde) query.andWhere('p.fechaPago >= :desde', { desde: filtros.desde.slice(0, 10) });
     if (filtros.hasta) query.andWhere('p.fechaPago <= :hasta', { hasta: filtros.hasta.slice(0, 10) });
 
-    const [data, total] = await query.getManyAndCount();
+    const [pagos, total] = await query.getManyAndCount();
+
+    // Documentos a los que se aplicó cada pago (número y fecha de la remisión o factura de compra)
+    const ids = pagos.map((p) => p.id);
+    const aplicaciones: any[] = ids.length
+      ? await this.dataSource.query(
+          `SELECT a.id_pago AS "idPago", a.id_factura_venta AS "idFactura", f.numero_venta AS numero,
+                  to_char(f.fecha_expedicion, 'YYYY-MM-DD') AS fecha, a.monto_aplicado AS "montoAplicado"
+             FROM aplicacion_pago_venta a JOIN facturas_venta f ON f.id_factura_venta = a.id_factura_venta
+            WHERE a.id_pago = ANY($1::uuid[])
+           UNION ALL
+           SELECT a.id_pago, a.id_factura_compra, fc.numero_factura,
+                  to_char(fc.fecha_emision, 'YYYY-MM-DD'), a.monto_aplicado
+             FROM aplicacion_pago_compra a JOIN facturas_compra fc ON fc.id_factura_compra = a.id_factura_compra
+            WHERE a.id_pago = ANY($1::uuid[])`,
+          [ids],
+        )
+      : [];
+    const porPago = new Map<string, any[]>();
+    for (const a of aplicaciones) {
+      const lista = porPago.get(a.idPago) || [];
+      lista.push({ idFactura: a.idFactura, numero: a.numero, fecha: a.fecha, montoAplicado: Number(a.montoAplicado) });
+      porPago.set(a.idPago, lista);
+    }
+    const data = pagos.map((p) => ({ ...p, documentos: porPago.get(p.id) || [] }));
     return paginado(data, total, pagina);
   }
 

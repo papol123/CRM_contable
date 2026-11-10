@@ -18,6 +18,8 @@
     "db:migrate:nube": "node scripts/migrate.js",
     "seed": "node scripts/seed-database.js",
     "seed:local": "node scripts/seed-database.js --local",
+    "usuarios": "node scripts/restablecer-clave.js",
+    "autorizar-ip": "powershell -ExecutionPolicy Bypass -File ./scripts/autorizar-ip.ps1",
     "seed:demo": "node scripts/seed-demo.js",
     "db:setup": "npm run db:migrate && npm run seed && npm run seed:demo",
     "test": "jest",

@@ -1,0 +1,13 @@
+# Archivos que no se suben a Cloud Build (gcloud run deploy --source)
+.gcloudignore
+.git
+node_modules
+.next
+out
+*.log
+tsconfig.tsbuildinfo
+# .env.local apunta al backend local: nunca debe entrar a la imagen.
+# .env.production SÍ se sube (lo genera desplegar-cloud-run.ps1 con las URL de la nube).
+.env
+.env.local
+.env.*.local

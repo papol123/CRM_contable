@@ -94,6 +94,15 @@ export class CreateFacturaVentaDto {
   observaciones?: string;
 
   @ApiPropertyOptional({
+    example: 'Pedro Gómez · 310 555 1234',
+    description: 'Quién queda debiendo. Obligatorio en ventas a crédito a Consumidor final',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  nombreDeudor?: string;
+
+  @ApiPropertyOptional({
     example: true,
     description: 'true: registra en la misma operación el pago por el total (venta de contado: queda PAGADA, sin cartera)',
   })
@@ -180,4 +189,63 @@ export class ConsultaRemisionesDto extends PaginacionDto {
   @IsOptional()
   @IsDateString()
   hasta?: string;
+}
+
+/**
+ * Remisión rápida: solo número de la factura física y valor total (sin
+ * detalle de repuestos ni inventario). Puede ser de contado (queda cobrada)
+ * o a crédito (queda en Deudores).
+ */
+export class RemisionRapidaDto {
+  @ApiProperty({ example: '004512', description: 'Número de la factura o remisión física (talonario)' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(40)
+  numeroFactura: string;
+
+  @ApiProperty({ example: 185000, description: 'Valor total de la venta (COP)' })
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsPositive()
+  @Max(999_999_999_999)
+  valor: number;
+
+  @ApiPropertyOptional({ example: '2026-11-09', description: 'Fecha de la venta. Por defecto, hoy' })
+  @IsOptional()
+  @IsDateString()
+  fecha?: string;
+
+  @ApiProperty({ example: false, description: 'true: queda a crédito (en Deudores); false: de contado (cobrada)' })
+  @IsBoolean()
+  credito: boolean;
+
+  @ApiPropertyOptional({ example: 30, description: 'Días de plazo del crédito. Por defecto, 30' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 0 })
+  @Min(1)
+  @Max(365)
+  diasPlazo?: number;
+
+  @ApiPropertyOptional({ description: 'Cliente. Por defecto, Consumidor final' })
+  @IsOptional()
+  @IsUUID()
+  idCliente?: string;
+
+  @ApiPropertyOptional({ example: 'Pedro Gómez · 310 555 1234', description: 'Obligatorio a crédito con Consumidor final' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  nombreDeudor?: string;
+
+  @ApiPropertyOptional({ description: 'Medio de pago si es de contado. Por defecto, EFECTIVO' })
+  @IsOptional()
+  @IsUUID()
+  idMetodoPago?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  observaciones?: string;
 }

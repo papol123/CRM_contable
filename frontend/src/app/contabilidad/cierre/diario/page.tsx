@@ -14,6 +14,7 @@ import {
   ShoppingBag,
   CreditCard,
   Plus,
+  Zap,
   Trash2,
   CheckCircle2,
   AlertCircle,
@@ -26,6 +27,7 @@ import {
 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { ComprobanteCierre, ComprobanteCierreProps } from './ComprobanteCierre';
+import { ModalRemisionRapida } from '@/components/ventas/ModalRemisionRapida';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
@@ -119,6 +121,7 @@ export default function CierreDiarioPage() {
   // 3. Gastos del día (se registran como gastos reales del sistema)
   const [gastos, setGastos] = useState<GastoItem[]>([]);
   const [isModalGastoOpen, setIsModalGastoOpen] = useState(false);
+  const [rapidaAbierta, setRapidaAbierta] = useState(false);
   const [gastoConcepto, setGastoConcepto] = useState('');
   const [gastoCategoria, setGastoCategoria] = useState('');
   const [gastoMonto, setGastoMonto] = useState<number>(0);
@@ -558,20 +561,31 @@ export default function CierreDiarioPage() {
                 <Receipt className="w-4 h-4 text-[#10b981]" />
                 <h2 className="text-sm font-semibold text-[#0f172a]">Remisiones de Venta del Día</h2>
               </div>
-              <Button
-                size="sm"
-                variant="outline"
-                icon={<Plus className="w-3.5 h-3.5" />}
-                onClick={() => irAFormulario('/facturacion/nueva')}
-                title="Emite la remisión real (descuenta inventario y genera cartera) con la fecha de este cierre"
-              >
-                Emitir Remisión
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="primary"
+                  icon={<Zap className="w-3.5 h-3.5" />}
+                  onClick={() => setRapidaAbierta(true)}
+                  title="Solo número de factura y valor, de contado o a crédito (queda en Deudores)"
+                >
+                  Remisión rápida
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  icon={<Plus className="w-3.5 h-3.5" />}
+                  onClick={() => irAFormulario('/facturacion/nueva')}
+                  title="Remisión con detalle de repuestos (descuenta inventario) con la fecha de este cierre"
+                >
+                  Con detalle
+                </Button>
+              </div>
             </div>
 
             {remisiones.length === 0 ? (
               <div className="p-8 text-center text-xs text-[#64748b] border border-dashed border-[#cbd5e1] rounded-lg">
-                No hay remisiones registradas para esta fecha. Usa «Emitir Remisión» para registrar una.
+                No hay remisiones para esta fecha. Usa «Remisión rápida» para registrar una factura solo con su número y valor.
               </div>
             ) : (
               <div className="overflow-x-auto border border-[#e2e8f0] rounded-lg">
@@ -916,6 +930,24 @@ export default function CierreDiarioPage() {
             </div>
           </div>
         </div>
+
+        {/* Remisión rápida: número de factura + valor, de contado o a crédito (Deudores) */}
+        <ModalRemisionRapida
+          isOpen={rapidaAbierta}
+          fecha={fechaCierre}
+          onClose={() => setRapidaAbierta(false)}
+          onCreada={(r) => {
+            setRapidaAbierta(false);
+            queryClient.invalidateQueries({ queryKey: ['cierre-diario', fechaCierre] });
+            queryClient.invalidateQueries({ queryKey: ['cuentas-por-cobrar'] });
+            success(
+              'Remisión registrada',
+              r.saldo > 0
+                ? `Factura N° ${r.numeroExterno} por ${formatCOP(r.total)} quedó a crédito en Deudores.`
+                : `Factura N° ${r.numeroExterno} por ${formatCOP(r.total)} registrada de contado.`,
+            );
+          }}
+        />
 
         {/* Modal para Agregar Gasto */}
         <Modal

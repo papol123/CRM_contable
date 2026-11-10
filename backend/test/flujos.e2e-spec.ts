@@ -121,6 +121,45 @@ describe('Flujos críticos', () => {
       expect(cobro?.estado?.codigo).toBe('ANULADO');
     });
 
+    it('remisión rápida (número de factura + valor): contado queda cobrada; número repetido → 409', async () => {
+      const numero = `TAL-${Date.now()}`;
+      const { body: r } = await post('/facturas-venta/rapida', usuario, { numeroFactura: numero, valor: 85000, credito: false }, randomUUID()).expect(201);
+      expect(r).toMatchObject({ numeroExterno: numero, total: 85000, pagado: 85000, saldo: 0 });
+      expect(r.numeroVenta).toMatch(/^REM-\d{6}$/);
+      expect(r.estado.codigo).toBe('PAGADA');
+      await post('/facturas-venta/rapida', usuario, { numeroFactura: numero, valor: 1000, credito: false }, randomUUID()).expect(409);
+    });
+
+    it('crédito a Consumidor final: exige quién debe y queda en Deudores (cuentas por cobrar)', async () => {
+      const numero = `TAL-CF-${Date.now()}`;
+      const sinNombre = await post('/facturas-venta/rapida', usuario, { numeroFactura: numero, valor: 50000, credito: true }, randomUUID());
+      expect(sinNombre.status).toBe(422);
+      expect(sinNombre.body.type).toMatch(/falta-nombre-deudor$/);
+
+      const { body: fiada } = await post(
+        '/facturas-venta/rapida',
+        usuario,
+        { numeroFactura: numero, valor: 50000, credito: true, diasPlazo: 15, nombreDeudor: 'Pedro Gómez 3105551234' },
+        randomUUID(),
+      ).expect(201);
+      expect(fiada).toMatchObject({ saldo: 50000, nombreDeudor: 'Pedro Gómez 3105551234' });
+
+      const deudores = (await get('/cuentas-por-cobrar?limit=100', admin)).body.data;
+      const fila = deudores.find((d: any) => d.idFactura === fiada.id);
+      expect(fila).toMatchObject({ numeroExterno: numero, nombreDeudor: 'Pedro Gómez 3105551234', saldo: 50000 });
+
+      // Remisión normal (con repuestos) fiada a Consumidor final: sin cupo, con nombre del deudor
+      const cf = (await get('/clientes/buscar?q=222222222222', usuario)).body[0];
+      const hoy = new Date().toISOString().slice(0, 10);
+      const vence = new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10);
+      const normal = await post('/facturas-venta', usuario, venta({ idCliente: cf.id, fechaExpedicion: hoy, fechaVencimiento: vence, nombreDeudor: 'María Ruiz' }), randomUUID());
+      expect(normal.status).toBe(201);
+      expect(normal.body).toMatchObject({ nombreDeudor: 'María Ruiz', saldo: 107100 });
+
+      await post(`/facturas-venta/${fiada.id}/anular`, admin, { motivo: 'Prueba' }).expect(200);
+      await post(`/facturas-venta/${normal.body.id}/anular`, admin, { motivo: 'Prueba' }).expect(200);
+    });
+
     it('venta a crédito con crédito bloqueado → 422; desbloquear conserva el cupo', async () => {
       const cupoAntes = Number(cliente.cupoCredito);
       await post(`/clientes/${cliente.id}/bloquear-credito`, admin, { motivo: 'Mora mayor a 90 días' }).expect(200);

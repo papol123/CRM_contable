@@ -23,7 +23,8 @@ param(
   [string]$Servicio = 'crm-contable-api',
   [string]$InstanciaSql = 'crm-contable-db',
   [string]$Bucket = '',
-  [string]$FrontendUrl = 'http://localhost:3001',
+  # Vacío: si el frontend ya está en Cloud Run (crm-contable-web) se usa su dirección
+  [string]$FrontendUrl = '',
   [int]$InstanciasMinimas = 0,
   [switch]$ActualizarSecretos
 )
@@ -66,6 +67,15 @@ if (-not $conexionSql) { throw "No se encontró la instancia Cloud SQL '$Instanc
 Write-Host "Cloud SQL: $conexionSql"
 
 $numeroProyecto = (& $GcloudExe projects describe $ProjectId --format='value(projectNumber)')
+
+if (-not $FrontendUrl) {
+  $urlWeb = $null
+  if (Existe run services describe crm-contable-web --region $Region) {
+    $urlWeb = (& $GcloudExe run services describe crm-contable-web --region $Region --format='value(status.url)')
+  }
+  $FrontendUrl = if ($urlWeb) { "$urlWeb;http://localhost:3001" } else { 'http://localhost:3001' }
+}
+Write-Host "Frontend permitido (CORS): $FrontendUrl"
 $cuentaServicio = "$numeroProyecto-compute@developer.gserviceaccount.com"
 
 # ─── Secret Manager ──────────────────────────────────────────────────────────
@@ -110,37 +120,47 @@ foreach ($rol in 'roles/cloudsql.client', 'roles/cloudsql.editor') {
 
 # ─── Despliegue ──────────────────────────────────────────────────────────────
 Paso "Construyendo y desplegando $Servicio en $Region (tarda unos minutos)"
-# ^@^ cambia el separador de variables para permitir comas en FRONTEND_URL
-$variables = '^@^' + (@(
-    'NODE_ENV=production',
-    "DB_HOST=/cloudsql/$conexionSql",
-    'DB_PORT=5432',
-    "DB_USER=$($envVars['DB_USER'])",
-    "DB_NAME=$($envVars['DB_NAME'])",
-    'DB_SSL=false',
-    'JWT_EXPIRATION=15m',
-    'REFRESH_TOKEN_EXPIRATION_DAYS=7',
-    "FRONTEND_URL=$FrontendUrl",
-    'APP_TIMEZONE=America/Bogota',
-    'TRUST_PROXY_HOPS=1',
-    'STORAGE_DRIVER=gcs',
-    "GCP_STORAGE_BUCKET_NAME=$Bucket",
-    "GCP_PROJECT_ID=$ProjectId",
-    "CLOUD_SQL_INSTANCE=$InstanciaSql",
-    'JOBS_WORKER=true'
-  ) -join '@')
+# Las variables van en un archivo YAML (--env-vars-file): pasarlas en la línea de
+# comandos falla en Windows, donde gcloud.cmd pasa por cmd.exe y este se come
+# caracteres como ^ (el backend arrancaba sin DB_HOST).
+$variables = [ordered]@{
+  NODE_ENV                      = 'production'
+  DB_HOST                       = "/cloudsql/$conexionSql"
+  DB_PORT                       = '5432'
+  DB_USER                       = $envVars['DB_USER']
+  DB_NAME                       = $envVars['DB_NAME']
+  DB_SSL                        = 'false'
+  JWT_EXPIRATION                = '15m'
+  REFRESH_TOKEN_EXPIRATION_DAYS = '7'
+  FRONTEND_URL                  = $FrontendUrl
+  APP_TIMEZONE                  = 'America/Bogota'
+  TRUST_PROXY_HOPS              = '1'
+  STORAGE_DRIVER                = 'gcs'
+  GCP_STORAGE_BUCKET_NAME       = $Bucket
+  GCP_PROJECT_ID                = $ProjectId
+  CLOUD_SQL_INSTANCE            = $InstanciaSql
+  JOBS_WORKER                   = 'true'
+}
+$archivoVariables = Join-Path ([IO.Path]::GetTempPath()) "crm-api-env-$([guid]::NewGuid()).yaml"
+# Valores entre comillas simples de YAML (una comilla simple se escribe doble)
+$yaml = ($variables.GetEnumerator() | ForEach-Object { "$($_.Key): '$(([string]$_.Value) -replace "'", "''")'" }) -join "`n"
+[IO.File]::WriteAllText($archivoVariables, $yaml + "`n", (New-Object System.Text.UTF8Encoding $false))
 
-Invoke-Gcloud run deploy $Servicio `
-  --source . `
-  --region $Region `
-  --allow-unauthenticated `
-  --add-cloudsql-instances $conexionSql `
-  --set-env-vars $variables `
-  --set-secrets $secretos `
-  --no-cpu-throttling `
-  --min-instances $InstanciasMinimas `
-  --memory 1Gi `
-  --timeout 300
+try {
+  Invoke-Gcloud run deploy $Servicio `
+    --source . `
+    --region $Region `
+    --allow-unauthenticated `
+    --add-cloudsql-instances $conexionSql `
+    --env-vars-file $archivoVariables `
+    --set-secrets $secretos `
+    --no-cpu-throttling `
+    --min-instances $InstanciasMinimas `
+    --memory 1Gi `
+    --timeout 300
+} finally {
+  Remove-Item $archivoVariables -Force -ErrorAction SilentlyContinue
+}
 
 $url = (& $GcloudExe run services describe $Servicio --region $Region --format='value(status.url)')
 

@@ -873,14 +873,14 @@ const SQL_BORRAR_DEMO = `
   DELETE FROM movimientos_inventario;
   DELETE FROM precios_producto;
   DELETE FROM producto_proveedor;
-  DELETE FROM productos;
+  DELETE FROM productos WHERE codigo <> 'VENTA-GENERAL'; -- producto del sistema (migración 009)
   DELETE FROM direcciones;
   DELETE FROM emails;
   DELETE FROM telefonos;
   DELETE FROM contactos;
-  DELETE FROM clientes;
+  DELETE FROM clientes WHERE id_tercero NOT IN (SELECT id_tercero FROM terceros WHERE numero_documento = '222222222222'); -- Consumidor final (migración 008)
   DELETE FROM proveedores;
-  DELETE FROM terceros WHERE id_tercero NOT IN (SELECT id_tercero FROM usuarios WHERE id_tercero IS NOT NULL);
+  DELETE FROM terceros WHERE id_tercero NOT IN (SELECT id_tercero FROM usuarios WHERE id_tercero IS NOT NULL) AND numero_documento <> '222222222222';
 `;
 
 /**
@@ -905,7 +905,7 @@ async function main() {
 
   try {
     const { rows } = await client.query(
-      `SELECT (SELECT COUNT(*) FROM productos) + (SELECT COUNT(*) FROM facturas_venta) AS n`,
+      `SELECT (SELECT COUNT(*) FROM productos WHERE codigo <> 'VENTA-GENERAL') + (SELECT COUNT(*) FROM facturas_venta) AS n`,
     );
     const hayDatos = Number(rows[0].n) > 0;
     if (hayDatos && !RESET) {

@@ -55,6 +55,11 @@ export const SQL_PAGADO_FACTURA_COMPRA = `(
 export interface SaldoFacturaVenta {
   idFactura: string;
   numeroVenta: string;
+  /** Número de la factura física cuando se registró como remisión rápida. */
+  numeroExterno: string | null;
+  /** Quién quedó debiendo cuando el crédito es a Consumidor final. */
+  nombreDeudor: string | null;
+  observaciones: string | null;
   idCliente: string;
   idTercero: string;
   cliente: string;
@@ -111,6 +116,9 @@ const SQL_SALDOS_VENTA = `
   SELECT * FROM (
     SELECT f.id_factura_venta   AS "idFactura",
            f.numero_venta       AS "numeroVenta",
+           f.numero_externo     AS "numeroExterno",
+           f.nombre_deudor      AS "nombreDeudor",
+           f.observaciones      AS "observaciones",
            f.id_cliente         AS "idCliente",
            c.id_tercero         AS "idTercero",
            t.razon_social       AS "cliente",

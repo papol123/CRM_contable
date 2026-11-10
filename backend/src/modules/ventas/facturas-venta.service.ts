@@ -18,6 +18,7 @@ import {
   CreateFacturaVentaDto,
   CalcularFacturaDto,
   ConsultaRemisionesDto,
+  RemisionRapidaDto,
   UpdateFacturaVentaDto,
 } from './dto/factura-venta.dto';
 import { calcularLinea, calcularTotales, redondear } from '../../common/documentos/totales';
@@ -40,6 +41,9 @@ import { MetodoPago } from '../../database/entities/metodo-pago.entity';
 
 /** Marca del cobro que se crea junto con una remisión de contado (se anula con ella). */
 const PREFIJO_PAGO_CONTADO_VENTA = 'Cobro de contado de la remisión';
+
+/** Documento del cliente "Consumidor final" (migración 008). */
+const DOCUMENTO_CONSUMIDOR_FINAL = '222222222222';
 import { PERMISOS_GLOBALES, asegurarPropietario, filtroPropietario } from '../../common/autorizacion/propiedad';
 
 export interface OpcionesCreacionFactura {
@@ -202,24 +206,93 @@ export class FacturasVentaService {
       );
 
       // Venta de contado: el cobro por el total se registra en la misma transacción
-      if (dto.pagadaDeContado) {
-        const [saldo] = await consultarSaldosVenta(manager, { id: idFactura });
-        if (saldo && saldo.saldo > 0) {
-          const factura = await manager.findOne(FacturaVenta, { where: { id: idFactura } });
-          await this.pagos.registrarEnTransaccion(
-            manager,
-            {
-              tipoPago: 'factura de venta',
-              idFactura: idFactura,
-              idMetodoPago: dto.idMetodoPago || (await this.metodoEfectivo(manager)),
-              monto: saldo.saldo,
-              fechaPago: factura?.fechaExpedicion,
-              observaciones: `${PREFIJO_PAGO_CONTADO_VENTA} ${factura?.numeroVenta ?? ''}`.trim(),
-            },
-            actor,
-          );
-        }
+      if (dto.pagadaDeContado) await this.registrarCobroContado(manager, idFactura, dto.idMetodoPago, actor);
+      return idFactura;
+    });
+    return this.findFacturaById(id);
+  }
+
+  /** Registra el cobro por el saldo total de la remisión (venta de contado). */
+  private async registrarCobroContado(manager: EntityManager, idFactura: string, idMetodoPago: string | undefined, actor?: Actor) {
+    const [saldo] = await consultarSaldosVenta(manager, { id: idFactura });
+    if (!saldo || saldo.saldo <= 0) return;
+    const factura = await manager.findOne(FacturaVenta, { where: { id: idFactura } });
+    const referencia = factura?.numeroExterno || factura?.numeroVenta || '';
+    await this.pagos.registrarEnTransaccion(
+      manager,
+      {
+        tipoPago: 'factura de venta',
+        idFactura,
+        idMetodoPago: idMetodoPago || (await this.metodoEfectivo(manager)),
+        monto: saldo.saldo,
+        fechaPago: factura?.fechaExpedicion,
+        observaciones: `${PREFIJO_PAGO_CONTADO_VENTA} ${referencia}`.trim(),
+      },
+      actor,
+    );
+  }
+
+  /** Id del cliente "Consumidor final" (migración 008). */
+  private async idConsumidorFinal(manager: EntityManager): Promise<string> {
+    const [fila] = await manager.query(
+      `SELECT c.id_cliente FROM clientes c JOIN terceros t ON t.id_tercero = c.id_tercero
+        WHERE t.numero_documento = $1`,
+      [DOCUMENTO_CONSUMIDOR_FINAL],
+    );
+    if (!fila) throw new UnprocessableEntityException('No existe el cliente Consumidor final. Ejecute npm run db:migrate');
+    return fila.id_cliente;
+  }
+
+  /**
+   * Remisión rápida: solo número de la factura física y valor. Se registra como
+   * remisión real (consecutivo REM, cartera, cierres) con una línea del producto
+   * VENTA-GENERAL, que no mueve inventario. A crédito queda en Deudores.
+   */
+  async crearRapida(dto: RemisionRapidaDto, actor: Actor): Promise<any> {
+    if (!dto.credito && !actor.permisos.includes('pagos.registrar')) {
+      throw new ForbiddenException('Registrar la venta de contado requiere el permiso pagos.registrar');
+    }
+    const numeroExterno = dto.numeroFactura.trim();
+    const fecha = dto.fecha?.slice(0, 10) || fechaHoy();
+
+    const id = await this.dataSource.transaction(async (manager) => {
+      const [repetida] = await manager.query(
+        `SELECT numero_venta FROM facturas_venta WHERE anulada = false AND LOWER(numero_externo) = LOWER($1)`,
+        [numeroExterno],
+      );
+      if (repetida) {
+        throw new ConflictException(`La factura N° ${numeroExterno} ya está registrada (${repetida.numero_venta})`);
       }
+      const [producto] = await manager.query(`SELECT id_producto FROM productos WHERE codigo = 'VENTA-GENERAL'`);
+      if (!producto) throw new UnprocessableEntityException('Falta el producto VENTA-GENERAL. Ejecute npm run db:migrate');
+
+      const idCliente = dto.idCliente || (await this.idConsumidorFinal(manager));
+      const idFactura = await this.crearEnTransaccion(
+        manager,
+        {
+          idCliente,
+          fechaExpedicion: fecha,
+          fechaVencimiento: dto.credito ? sumarDias(fecha, dto.diasPlazo || 30) : fecha,
+          nombreDeudor: dto.nombreDeudor,
+          observaciones: dto.observaciones,
+          items: [{ idProducto: producto.id_producto, cantidad: 1, valorUnitario: dto.valor, pctDescuento: 0, pctIva: 0 }],
+        },
+        actor.id,
+      );
+      await manager.query(`UPDATE facturas_venta SET numero_externo = $2 WHERE id_factura_venta = $1`, [idFactura, numeroExterno]);
+      await this.auditoria.registrar(
+        {
+          idUsuario: actor.id,
+          accion: 'CREAR_REMISION_RAPIDA',
+          recurso: 'facturas_venta',
+          idRecurso: idFactura,
+          valorNuevo: dto,
+          ip: actor.ip,
+          userAgent: actor.userAgent,
+        },
+        manager,
+      );
+      if (!dto.credito) await this.registrarCobroContado(manager, idFactura, dto.idMetodoPago, actor);
       return idFactura;
     });
     return this.findFacturaById(id);
@@ -276,8 +349,19 @@ export class FacturasVentaService {
       throw new UnprocessableEntityException('La retención no puede superar el valor de la remisión');
     }
 
+    // Consumidor final: agrupa muchos compradores sin identificar. Se le fía sin cupo,
+    // pero hay que decir quién queda debiendo para poder cobrarle (página Deudores).
+    const esConsumidorFinal = cliente.tercero?.numeroDocumento === DOCUMENTO_CONSUMIDOR_FINAL;
+    const nombreDeudor = dto.nombreDeudor?.trim() || null;
+    if (fechaVencimiento > fechaExpedicion && esConsumidorFinal && !nombreDeudor) {
+      throw new UnprocessableEntityException({
+        message: 'Para fiar a Consumidor final indique el nombre de quien queda debiendo',
+        tipo: 'falta-nombre-deudor',
+      });
+    }
+
     // Venta a crédito: cliente sin bloqueo y saldo pendiente + esta venta dentro del cupo
-    if (fechaVencimiento > fechaExpedicion) {
+    if (fechaVencimiento > fechaExpedicion && !esConsumidorFinal) {
       if (cliente.creditoBloqueado) {
         throw new UnprocessableEntityException({
           message: `El crédito del cliente está bloqueado${cliente.motivoBloqueo ? `: ${cliente.motivoBloqueo}` : ''}. Solo se le puede vender de contado`,
@@ -313,6 +397,7 @@ export class FacturasVentaService {
         idBodega,
         idUsuario,
         observaciones: dto.observaciones,
+        nombreDeudor: fechaVencimiento > fechaExpedicion ? nombreDeudor : null,
         estadoDian: 'NO_APLICA',
       }),
     );

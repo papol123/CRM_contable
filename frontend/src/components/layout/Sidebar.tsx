@@ -78,6 +78,7 @@ export function Sidebar() {
       icon: <BookOpen className="w-5 h-5 shrink-0" />,
       subItems: [
         { title: 'Cierre Diario', href: '/contabilidad/cierre/diario', adminOnly: true, permission: 'cierres.ejecutar' },
+        { title: 'Deudores', href: '/contabilidad/deudores', permission: 'cartera.consultar' },
         { title: 'Cartera y Pagos', href: '/contabilidad/cartera', permission: 'cartera.consultar' },
         { title: 'Nómina', href: '/contabilidad/nomina', adminOnly: true, permission: 'nomina.consultar' },
         { title: 'Cierre Contable', href: '/contabilidad/cierre', adminOnly: true, permission: 'cierres.ejecutar' },

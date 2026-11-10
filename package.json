@@ -11,6 +11,9 @@
     "db:migrate:local": "npm --prefix backend run db:migrate:local",
     "db:migrate:nube": "npm --prefix backend run db:migrate",
     "backend": "npm --prefix backend run start:dev",
-    "frontend": "npm --prefix frontend run dev"
+    "frontend": "npm --prefix frontend run dev",
+    "desplegar": "powershell -ExecutionPolicy Bypass -File ./desplegar.ps1",
+    "usuarios": "npm --prefix backend run usuarios --",
+    "autorizar-ip": "npm --prefix backend run autorizar-ip"
   }
 }

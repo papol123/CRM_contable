@@ -169,8 +169,9 @@ export class CierreDiarioService {
       const pagada = f.estado?.codigo === 'PAGADA' || saldo <= 0;
       return {
         id: f.id,
-        numero: f.numeroVenta,
-        cliente: f.cliente?.tercero?.razonSocial || 'Cliente General',
+        // Remisión rápida: se identifica por el número de la factura física
+        numero: f.numeroExterno ? `N° ${f.numeroExterno} (${f.numeroVenta})` : f.numeroVenta,
+        cliente: [f.cliente?.tercero?.razonSocial || 'Cliente General', f.nombreDeudor].filter(Boolean).join(' · '),
         total: Number(f.total || 0),
         saldo,
         pagadaSistema: pagada,

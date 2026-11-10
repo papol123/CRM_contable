@@ -59,7 +59,7 @@ export class TokensUsuarioService {
   }
 
   enlace(token: string, tipo: TipoTokenUsuario): string {
-    const base = (this.config.get<string>('FRONTEND_URL') || 'http://localhost:3001').split(',')[0].trim();
+    const base = (this.config.get<string>('FRONTEND_URL') || 'http://localhost:3001').split(/[,;]/)[0].trim();
     const ruta = tipo === 'INVITACION' ? 'activar-cuenta' : 'restablecer-contrasena';
     return `${base.replace(/\/$/, '')}/${ruta}?token=${encodeURIComponent(token)}`;
   }

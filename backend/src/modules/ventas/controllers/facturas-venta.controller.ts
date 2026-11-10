@@ -21,6 +21,7 @@ import {
   CreateFacturaVentaDto,
   CalcularFacturaDto,
   ConsultaRemisionesDto,
+  RemisionRapidaDto,
   UpdateFacturaVentaDto,
   AnularDocumentoDto,
 } from '../dto/factura-venta.dto';
@@ -92,6 +93,20 @@ export class FacturasVentaController {
   @ApiResponse({ status: 422, description: 'Cupo insuficiente, crédito bloqueado, cliente inactivo o periodo cerrado' })
   async create(@Body() dto: CreateFacturaVentaDto, @Actor() actor: Actor) {
     return this.facturasService.createFactura(dto, actor);
+  }
+
+  @Post('rapida')
+  @HttpCode(HttpStatus.CREATED)
+  @RequirePermission('ventas.crear')
+  @Idempotente()
+  @ApiOperation({
+    summary: 'Remisión rápida: solo número de la factura física y valor (sin detalle ni inventario)',
+    description: 'De contado queda cobrada; a crédito queda en cartera (Deudores). Con Consumidor final a crédito exige nombreDeudor.',
+  })
+  @ApiResponse({ status: 409, description: 'Ese número de factura ya está registrado' })
+  @ApiResponse({ status: 422, description: 'Falta el nombre del deudor, cupo insuficiente o periodo cerrado' })
+  async crearRapida(@Body() dto: RemisionRapidaDto, @Actor() actor: Actor) {
+    return this.facturasService.crearRapida(dto, actor);
   }
 
   @Patch(':id')

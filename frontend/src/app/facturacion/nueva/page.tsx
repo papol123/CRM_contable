@@ -136,10 +136,9 @@ export default function NuevaRemisionPage() {
     }
   }, [consumidorFinal]);
   const esConsumidorFinal = selectedCliente?.numeroDocumento === DOCUMENTO_CONSUMIDOR_FINAL;
-  // Al consumidor final no se le fía: siempre de contado
-  useEffect(() => {
-    if (esConsumidorFinal) setCondicionPago('CONTADO');
-  }, [esConsumidorFinal]);
+  // A Consumidor final se le puede fiar, anotando quién queda debiendo (aparece en Deudores)
+  const [nombreDeudor, setNombreDeudor] = useState('');
+  const faltaNombreDeudor = esConsumidorFinal && condicionPago === 'CREDITO' && !nombreDeudor.trim();
 
   // Búsqueda de productos por código o nombre
   const { data: prodsEncontrados = [] } = useQuery<any[]>({
@@ -272,6 +271,7 @@ export default function NuevaRemisionPage() {
         observaciones: observaciones.trim() || undefined,
         // De contado: el cobro se registra junto con la remisión (queda PAGADA)
         pagadaDeContado: condicionPago === 'CONTADO',
+        nombreDeudor: condicionPago === 'CREDITO' && esConsumidorFinal ? nombreDeudor.trim() : undefined,
         idMetodoPago: condicionPago === 'CONTADO' ? idMetodoPago || undefined : undefined,
       };
 
@@ -659,8 +659,7 @@ export default function NuevaRemisionPage() {
                   </button>
                   <button
                     type="button"
-                    disabled={selectedCliente?.creditoBloqueado || esConsumidorFinal}
-                    title={esConsumidorFinal ? 'Al consumidor final solo se le vende de contado' : undefined}
+                    disabled={selectedCliente?.creditoBloqueado}
                     onClick={() => setCondicionPago('CREDITO')}
                     className={`py-2 text-xs font-semibold rounded-md border text-center transition-colors ${condicionPago === 'CREDITO'
                         ? 'bg-[#eff4ff] border-[#1d63ed] text-[#1d63ed]'
@@ -685,6 +684,21 @@ export default function NuevaRemisionPage() {
                       ))}
                     </select>
                     <p className="text-[10px] text-[#64748b]">La remisión queda cobrada (sin saldo pendiente).</p>
+                  </div>
+                )}
+                {condicionPago === 'CREDITO' && (
+                  <div className="pt-2 space-y-1">
+                    {esConsumidorFinal && (
+                      <>
+                        <label className="text-[11px] font-semibold text-[#64748b] uppercase">¿Quién queda debiendo? *</label>
+                        <Input
+                          placeholder="Nombre y teléfono"
+                          value={nombreDeudor}
+                          onChange={(e) => setNombreDeudor(e.target.value)}
+                        />
+                      </>
+                    )}
+                    <p className="text-[10px] text-amber-700">Queda a crédito por 30 días y aparece en Deudores.</p>
                   </div>
                 )}
               </div>
@@ -717,7 +731,7 @@ export default function NuevaRemisionPage() {
                   variant="primary"
                   className="w-full justify-center h-11 text-sm font-semibold"
                   isLoading={submitMutation.isPending}
-                  disabled={!selectedCliente || items.length === 0}
+                  disabled={!selectedCliente || items.length === 0 || faltaNombreDeudor}
                   onClick={() => submitMutation.mutate()}
                 >
                   Emitir Remisión Interna
